@@ -23,7 +23,8 @@ type Command struct {
 	Name      string
 	Usage     string
 	Summary   string
-	NeedsInit bool // нужна готовая .sky/; перед запуском sky заново проверяет .sky/readme/
+	Help      string // подробная справка: sky <команда> --help, sky help <команда>
+	NeedsInit bool   // нужна готовая .sky/; перед запуском sky заново проверяет .sky/readme/
 	Run       func(a *App, env Env, args []string) error
 }
 
@@ -78,6 +79,9 @@ func (a *App) Run(cwd string, args []string, out, errw io.Writer) int {
 	}
 	switch args[0] {
 	case "help", "-h", "--help":
+		if len(args) > 1 && args[0] == "help" {
+			return a.commandHelp(env, args[1])
+		}
 		a.help(env)
 		return 0
 	case "version", "-v", "--version":
@@ -88,6 +92,9 @@ func (a *App) Run(cwd string, args []string, out, errw io.Writer) int {
 	if c == nil {
 		fmt.Fprintf(errw, "✗ нет команды «%s». sky help — список\n", args[0])
 		return 2
+	}
+	if len(args) > 1 && (args[1] == "-h" || args[1] == "--help") {
+		return a.commandHelp(env, c.Name)
 	}
 	if c.NeedsInit {
 		l, err := repo.Find(cwd)
@@ -116,4 +123,19 @@ func (a *App) help(env Env) {
 		fmt.Fprintf(&b, "  %-34s %s\n", e.Usage, e.Summary)
 	}
 	fmt.Fprint(env.Out, b.String())
+}
+
+// commandHelp печатает подробную справку команды; без неё — её строку из общего списка.
+func (a *App) commandHelp(env Env, name string) int {
+	c := a.find(name)
+	if c == nil {
+		fmt.Fprintf(env.Err, "✗ нет команды «%s». sky help — список\n", name)
+		return 2
+	}
+	if c.Help == "" {
+		fmt.Fprintf(env.Out, "%s\n\n%s\n", c.Usage, c.Summary)
+		return 0
+	}
+	fmt.Fprint(env.Out, c.Help)
+	return 0
 }

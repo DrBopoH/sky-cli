@@ -330,3 +330,45 @@ func TestInitLeavesExistingHistoryAlone(t *testing.T) {
 		t.Error("лишние ветки в репозитории с историей")
 	}
 }
+
+func TestInitHelp(t *testing.T) {
+	for _, args := range [][]string{{"init", "--help"}, {"init", "-h"}, {"help", "init"}} {
+		code, out, errs := run(New(), t.TempDir(), args...)
+		if code != 0 || errs != "" {
+			t.Fatalf("%v: %d %s", args, code, errs)
+		}
+		for _, want := range []string{"sky init — справка", "Задача Claude", "── Синтаксис", "sky init ./"} {
+			if !strings.Contains(out, want) {
+				t.Errorf("%v: нет %q", args, want)
+			}
+		}
+	}
+}
+
+func TestInitHelpDoesNotInit(t *testing.T) {
+	dir := t.TempDir()
+	run(New(), dir, "init", "--help")
+	if _, err := os.Stat(filepath.Join(dir, ".git")); err == nil {
+		t.Error("--help не должен создавать репозиторий")
+	}
+	if _, err := os.Stat(filepath.Join(dir, ".sky")); err == nil {
+		t.Error("--help не должен создавать .sky")
+	}
+}
+
+func TestHelpUnknownAndPlain(t *testing.T) {
+	if code, _, _ := run(New(), t.TempDir(), "help", "nope"); code != 2 {
+		t.Errorf("help nope: %d", code)
+	}
+	if code, out, _ := run(New(), t.TempDir(), "apply", "--help"); code != 0 || !strings.Contains(out, "sky apply") {
+		t.Errorf("apply --help: %d %s", code, out)
+	}
+}
+
+func TestInitHelpIsNeutral(t *testing.T) {
+	for _, bad := range []string{"clc.sh", "Док", "Ζωή", "zoe", "Makefile"} {
+		if strings.Contains(initHelp, bad) {
+			t.Errorf("справка содержит %q", bad)
+		}
+	}
+}

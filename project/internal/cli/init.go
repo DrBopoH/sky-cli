@@ -1,6 +1,7 @@
 package cli
 
 import (
+	_ "embed"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -10,11 +11,15 @@ import (
 	"github.com/DrBopoH/sky-cli/internal/scaffold"
 )
 
+//go:embed text/init-help.txt
+var initHelp string
+
 func initCommand() Command {
 	return Command{
 		Name:    "init",
 		Usage:   "sky init [пути…]",
 		Summary: "завести проект: git-репозиторий (если его нет), первый коммит в main и ветку dev (в новом репозитории), папки scope (по умолчанию project/), README.md и .gitignore (если их нет), .sky/; напр. sky init backend/ frontend/",
+		Help:    initHelp,
 		Run:     runInit,
 	}
 }
