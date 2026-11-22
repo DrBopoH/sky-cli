@@ -475,3 +475,31 @@ func TestCommitNeedsInit(t *testing.T) {
 		t.Errorf("%d %s", code, errs)
 	}
 }
+
+func TestCommitNewFlag(t *testing.T) {
+	dir := gitDir(t)
+	run(New(), dir, "init")
+	os.WriteFile(filepath.Join(dir, "new.txt"), []byte("новый\n"), 0o644)
+	os.WriteFile(filepath.Join(dir, "x.db"), []byte("x"), 0o644) // в .gitignore из шаблона
+
+	if code, _, errs := run(New(), dir, "commit", "feat: add new"); code != 1 || !strings.Contains(errs, "--new") {
+		t.Fatalf("без --new при одних новых файлах: %d %s", code, errs)
+	}
+	for _, args := range [][]string{{"commit", "--new", "feat: add new"}} {
+		code, out, errs := run(New(), dir, args...)
+		if code != 0 || strings.Contains(out, "не включены") {
+			t.Fatalf("%d %s %s", code, out, errs)
+		}
+	}
+	if files := git(t, dir, "show", "--name-only", "--format=", "HEAD"); files != "new.txt" {
+		t.Errorf("в коммите: %q", files)
+	}
+	// флаг можно ставить после сообщения
+	os.WriteFile(filepath.Join(dir, "n2.txt"), []byte("2\n"), 0o644)
+	if code, _, errs := run(New(), dir, "commit", "feat: add n2", "--new"); code != 0 {
+		t.Fatalf("%d %s", code, errs)
+	}
+	if st := git(t, dir, "status", "--porcelain"); st != "" {
+		t.Errorf("дерево не чистое: %q", st)
+	}
+}
