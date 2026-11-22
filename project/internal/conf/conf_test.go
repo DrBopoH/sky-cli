@@ -2,6 +2,7 @@ package conf
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -55,5 +56,46 @@ func TestParseDefaultsAndErrors(t *testing.T) {
 		if _, err := Parse(bad); err == nil {
 			t.Errorf("%q: ждали ошибку", bad)
 		}
+	}
+}
+
+func TestCommandsSections(t *testing.T) {
+	src := "scope = [backend/, frontend/]\n\n[backend/]\ntest = go test ./...\n\n[frontend/]\ntest = bun run test\nbuild = bun run build\n"
+	c, err := Parse(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Cmd["backend/"].Test != "go test ./..." || c.Cmd["backend/"].Build != "" || c.Cmd["frontend/"].Build != "bun run build" {
+		t.Fatalf("%v", c.Cmd)
+	}
+	if c.Cmd["frontend/"].Get("test") != "bun run test" || c.Cmd["frontend/"].Get("nope") != "" {
+		t.Error("Get")
+	}
+	back, err := Parse(Render(c))
+	if err != nil || !reflect.DeepEqual(back, c) {
+		t.Fatalf("круговой обмен: %v %v", back, err)
+	}
+}
+
+func TestCommandsSectionErrors(t *testing.T) {
+	for _, bad := range []string{
+		"scope = [a/]\n[b/]\ntest = x\n",         // папки нет в scope
+		"scope = [a/]\n[a]\ntest = x\n",          // секция без слэша
+		"scope = [a/, b/]\n[a/, b/]\ntest = x\n", // список вместо папки
+		"scope = [a/]\n[a/]\ncolor = red\n",      // неизвестный ключ секции
+		"scope = [a/]\n[a/]\ntest =\n",           // пустая команда
+		"scope = [a/]\n[a/]\nscope = [b/]\n",     // глобальный ключ внутри секции
+	} {
+		if _, err := Parse(bad); err == nil {
+			t.Errorf("%q: ждали ошибку", bad)
+		}
+	}
+}
+
+func TestRenderKeepsCommandsOnlyForScope(t *testing.T) {
+	c := Conf{Scope: []string{"a/"}, Inbox: "~/x", Cmd: map[string]Commands{"a/": {Test: "t"}, "gone/": {Test: "x"}}}
+	out := Render(c)
+	if !strings.Contains(out, "[a/]") || strings.Contains(out, "gone/") {
+		t.Fatalf("%s", out)
 	}
 }

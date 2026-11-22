@@ -7,27 +7,32 @@ import (
 
 	"github.com/DrBopoH/sky-cli/internal/conf"
 	"github.com/DrBopoH/sky-cli/internal/repo"
+	"github.com/DrBopoH/sky-cli/internal/scaffold"
 )
 
 func initCommand() Command {
 	return Command{
 		Name:    "init",
 		Usage:   "sky init [пути…]",
-		Summary: "завести .sky/ (sky.conf, stages/, readme/, foryou/, clouds/); пути — scope, по умолчанию project/; напр. sky init backend/ frontend/",
+		Summary: "завести проект: git-репозиторий (если его нет), первый коммит в main и ветку dev (в новом репозитории), папки scope (по умолчанию project/), README.md и .gitignore (если их нет), .sky/; напр. sky init backend/ frontend/",
 		Run:     runInit,
 	}
 }
 
 func runInit(a *App, env Env, args []string) error {
-	l, err := repo.Find(env.Cwd)
-	if err != nil {
-		return err
-	}
 	var scope []string
+	var err error
 	if len(args) > 0 {
 		if scope, err = conf.ParseScope(args); err != nil {
 			return err
 		}
+	}
+	l, created, err := repo.FindOrInit(env.Cwd)
+	if err != nil {
+		return err
+	}
+	if created {
+		fmt.Fprintf(env.Out, "✓ git init (ветка main) в %s\n", l.Root)
 	}
 	if err := l.MkDirs(); err != nil {
 		return err
@@ -38,12 +43,22 @@ func runInit(a *App, env Env, args []string) error {
 		return err
 	}
 
-	added, err := l.EnsureIgnored(".sky/")
+	for _, s := range c.Scope {
+		if s == "./" {
+			continue
+		}
+		dir := filepath.Join(l.Root, s)
+		if _, err := os.Stat(dir); os.IsNotExist(err) {
+			if err := os.MkdirAll(dir, 0o755); err != nil {
+				return err
+			}
+			fmt.Fprintf(env.Out, "✓ %s создана\n", s)
+		}
+	}
+
+	made, err := scaffoldFiles(env, l, c)
 	if err != nil {
 		return err
-	}
-	if added {
-		fmt.Fprintln(env.Out, "✓ .gitignore: добавлено .sky/")
 	}
 
 	changes, err := a.Heal(l)
@@ -63,12 +78,44 @@ func runInit(a *App, env Env, args []string) error {
 		}
 	}
 
-	for _, s := range c.Scope {
-		if st, err := os.Stat(filepath.Join(l.Root, s)); err != nil || !st.IsDir() {
-			fmt.Fprintf(env.Out, "⚠ папки %s пока нет — это только предупреждение\n", s)
+	// Новый репозиторий: первый коммит в main и сразу ветка dev, на которой работа продолжается.
+	if !l.HasCommits() {
+		if err := l.FirstCommit(firstCommitMsg, made); err != nil {
+			fmt.Fprintf(env.Out, "⚠ первый коммит не создан: %v\n", err)
+		} else {
+			fmt.Fprintln(env.Out, "✓ первый коммит в main, ветка dev создана и активна")
 		}
 	}
 	return nil
+}
+
+// firstCommitMsg — сообщение первого коммита в main.
+const firstCommitMsg = "chore: init. At the moment: project created by sky"
+
+// scaffoldFiles: .gitignore и README.md создаются только если их нет; иначе в .gitignore дописывается .sky/.
+func scaffoldFiles(env Env, l repo.Layout, c conf.Conf) ([]string, error) {
+	var made []string
+	ok, err := repo.WriteIfAbsent(filepath.Join(l.Root, ".gitignore"), []byte(scaffold.Gitignore()))
+	if err != nil {
+		return nil, err
+	}
+	if ok {
+		made = append(made, ".gitignore")
+		fmt.Fprintln(env.Out, "✓ .gitignore создан (шаблон)")
+	} else if added, err := l.EnsureIgnored(".sky/"); err != nil {
+		return nil, err
+	} else if added {
+		fmt.Fprintln(env.Out, "✓ .gitignore: добавлено .sky/")
+	}
+	ok, err = repo.WriteIfAbsent(filepath.Join(l.Root, "README.md"), []byte(scaffold.Readme(filepath.Base(l.Root), c.Scope)))
+	if err != nil {
+		return nil, err
+	}
+	if ok {
+		made = append(made, "README.md")
+		fmt.Fprintln(env.Out, "✓ README.md создан (шаблон)")
+	}
+	return made, nil
 }
 
 // writeConf: нет файла — создаёт; есть и пути не заданы — не трогает; есть и пути заданы — меняет только scope.
@@ -85,6 +132,11 @@ func writeConf(env Env, l repo.Layout, scope []string) (conf.Conf, error) {
 			return c, nil
 		}
 		c.Scope = scope
+		for p := range c.Cmd {
+			if !c.InScope(p) {
+				fmt.Fprintf(env.Out, "⚠ команды секции [%s] убраны: папки нет в новом scope\n", p)
+			}
+		}
 		fmt.Fprintf(env.Out, "↻ sky.conf: scope = %v\n", scope)
 		return c, os.WriteFile(l.Conf, []byte(conf.Render(c)), 0o644)
 	case os.IsNotExist(err):

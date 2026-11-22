@@ -56,11 +56,17 @@ func TestInitDefault(t *testing.T) {
 	if es, _ := os.ReadDir(l.Clouds); len(es) != 0 {
 		t.Fatalf("clouds/ должна быть пустой: %v", es)
 	}
-	if g, _ := os.ReadFile(filepath.Join(dir, ".gitignore")); !strings.Contains(string(g), ".sky/") {
-		t.Fatalf(".gitignore: %q", g)
+	if g, _ := os.ReadFile(filepath.Join(dir, ".gitignore")); !strings.Contains(string(g), ".sky/") || !strings.Contains(string(g), "*.db") {
+		t.Fatalf(".gitignore должен быть шаблоном с .sky/: %q", g)
 	}
-	if !strings.Contains(out, "project/") {
-		t.Fatalf("нет предупреждения про отсутствующую папку: %s", out)
+	if st, err := os.Stat(filepath.Join(dir, "project")); err != nil || !st.IsDir() {
+		t.Fatalf("папка project/ должна быть создана: %s", out)
+	}
+	if !strings.Contains(out, "✓ project/ создана") {
+		t.Fatalf("вывод: %s", out)
+	}
+	if b, err := os.ReadFile(filepath.Join(dir, "README.md")); err != nil || !strings.Contains(string(b), "- `project/`") {
+		t.Fatalf("README.md: %q %v", b, err)
 	}
 }
 
@@ -136,12 +142,81 @@ func TestInitMigratesLegacyReglament(t *testing.T) {
 	}
 }
 
-func TestInitErrors(t *testing.T) {
-	if code, _, errs := run(New(), t.TempDir(), "init"); code != 1 || !strings.Contains(errs, "git") {
-		t.Fatalf("вне git: %d %s", code, errs)
+func TestInitCreatesGitRepoOutsideGit(t *testing.T) {
+	dir := t.TempDir()
+	code, out, errs := run(New(), dir, "init")
+	if code != 0 {
+		t.Fatalf("%d %s", code, errs)
 	}
+	if !strings.Contains(out, "git init") {
+		t.Errorf("вывод: %s", out)
+	}
+	b, err := exec.Command("git", "-C", dir, "symbolic-ref", "--short", "HEAD").Output()
+	if err != nil || strings.TrimSpace(string(b)) != "dev" {
+		t.Fatalf("ветка: %q %v", b, err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, ".sky", "sky.conf")); err != nil {
+		t.Error("нет .sky/sky.conf")
+	}
+	if code, out, _ := run(New(), dir, "init"); code != 0 || strings.Contains(out, "git init") {
+		t.Errorf("повторный init не должен создавать репозиторий: %s", out)
+	}
+}
+
+func TestInitKeepsExistingFiles(t *testing.T) {
+	dir := gitDir(t)
+	os.WriteFile(filepath.Join(dir, "README.md"), []byte("мой ридми"), 0o644)
+	os.WriteFile(filepath.Join(dir, ".gitignore"), []byte("bin"), 0o644)
+	if code, _, errs := run(New(), dir, "init"); code != 0 {
+		t.Fatal(errs)
+	}
+	if b, _ := os.ReadFile(filepath.Join(dir, "README.md")); string(b) != "мой ридми" {
+		t.Errorf("README.md перезаписан: %q", b)
+	}
+	if b, _ := os.ReadFile(filepath.Join(dir, ".gitignore")); string(b) != "bin\n.sky/\n" {
+		t.Errorf(".gitignore: %q", b)
+	}
+}
+
+func TestInitCreatesScopeDirs(t *testing.T) {
+	dir := gitDir(t)
+	run(New(), dir, "init", "backend/", "frontend/")
+	for _, d := range []string{"backend", "frontend"} {
+		if st, err := os.Stat(filepath.Join(dir, d)); err != nil || !st.IsDir() {
+			t.Errorf("папка %s не создана", d)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(dir, "project")); err == nil {
+		t.Error("project/ не должна создаваться при явном scope")
+	}
+	dir2 := gitDir(t)
+	if code, _, errs := run(New(), dir2, "init", "./"); code != 0 {
+		t.Fatal(errs)
+	}
+	if b, _ := os.ReadFile(filepath.Join(dir2, "README.md")); !strings.Contains(string(b), "`./`") {
+		t.Errorf("README для корневого scope: %s", b)
+	}
+}
+
+func TestInitErrors(t *testing.T) {
 	if code, _, _ := run(New(), gitDir(t), "init", "../x"); code != 1 {
 		t.Fatal("scope вне репозитория должен падать")
+	}
+}
+
+func TestInitDropsCommandsOfRemovedScope(t *testing.T) {
+	dir := gitDir(t)
+	run(New(), dir, "init", "a/", "b/")
+	l := repo.At(dir)
+	os.WriteFile(l.Conf, []byte("scope = [a/, b/]\n\n[a/]\ntest = echo a\n\n[b/]\ntest = echo b\n"), 0o644)
+	_, out, _ := run(New(), dir, "init", "a/")
+	if !strings.Contains(out, "[b/]") {
+		t.Errorf("нужно предупреждение о [b/]: %s", out)
+	}
+	b, _ := os.ReadFile(l.Conf)
+	c, err := conf.Parse(string(b))
+	if err != nil || c.Cmd["a/"].Test != "echo a" || len(c.Cmd) != 1 {
+		t.Fatalf("команды: %v %v", c.Cmd, err)
 	}
 }
 
@@ -202,5 +277,56 @@ func TestHelpVersionUnknown(t *testing.T) {
 	}
 	if code, _, _ := run(a, t.TempDir(), "nope"); code != 2 {
 		t.Fatal("неизвестная команда — код 2")
+	}
+}
+
+func git(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+	out, err := exec.Command("git", append([]string{"-C", dir}, args...)...).CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %v: %v %s", args, err, out)
+	}
+	return strings.TrimSpace(string(out))
+}
+
+func TestInitFirstCommitAndDev(t *testing.T) {
+	dir := t.TempDir()
+	if code, out, errs := run(New(), dir, "init"); code != 0 {
+		t.Fatalf("%d %s %s", code, out, errs)
+	}
+	if b := git(t, dir, "branch", "--show-current"); b != "dev" {
+		t.Fatalf("активная ветка: %q", b)
+	}
+	if bs := git(t, dir, "branch", "--format=%(refname:short)"); bs != "dev\nmain" {
+		t.Fatalf("ветки: %q", bs)
+	}
+	if n := git(t, dir, "rev-list", "--count", "main"); n != "1" {
+		t.Fatalf("коммитов в main: %s", n)
+	}
+	if git(t, dir, "rev-parse", "main") != git(t, dir, "rev-parse", "dev") {
+		t.Error("dev должна стартовать с первого коммита main")
+	}
+	if m := git(t, dir, "log", "-1", "--format=%s", "main"); !strings.Contains(m, "At the moment") {
+		t.Errorf("сообщение: %q", m)
+	}
+	if f := git(t, dir, "ls-tree", "-r", "--name-only", "main"); f != ".gitignore\nREADME.md" {
+		t.Errorf("в коммите: %q", f)
+	}
+	if st := git(t, dir, "status", "--porcelain"); st != "" {
+		t.Errorf("дерево не чистое: %q", st)
+	}
+}
+
+func TestInitLeavesExistingHistoryAlone(t *testing.T) {
+	dir := gitDir(t)
+	git(t, dir, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "old")
+	before := git(t, dir, "rev-parse", "HEAD")
+	branch := git(t, dir, "branch", "--show-current")
+	run(New(), dir, "init")
+	if git(t, dir, "rev-parse", "HEAD") != before || git(t, dir, "branch", "--show-current") != branch {
+		t.Error("init не должен трогать репозиторий с историей")
+	}
+	if git(t, dir, "branch", "--format=%(refname:short)") != branch {
+		t.Error("лишние ветки в репозитории с историей")
 	}
 }
