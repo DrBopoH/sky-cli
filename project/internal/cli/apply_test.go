@@ -184,3 +184,28 @@ func TestReadmeDescribesApplyAndOperations(t *testing.T) {
 		}
 	}
 }
+
+func TestApplyCommitsEachPatchInOrder(t *testing.T) {
+	dir, inbox := project(t)
+	zipPatch(t, filepath.Join(inbox, "patch-1.zip"), map[string]string{
+		"project/a.txt": "a\n", ".sky/operation/commit": "feat: add a\n",
+	})
+	zipPatch(t, filepath.Join(inbox, "patch-2.zip"), map[string]string{
+		"project/b.txt": "b\n", ".sky/operation/commit": "fix: add b\n",
+	})
+	old := time.Now().Add(-time.Hour)
+	os.Chtimes(filepath.Join(inbox, "patch-1.zip"), old, old)
+	code, out, errs := run(New(), dir, "apply")
+	if code != 0 {
+		t.Fatalf("%d %s %s", code, out, errs)
+	}
+	if n := strings.Count(out, "● коммит "); n != 2 {
+		t.Errorf("строк «● коммит»: %d\n%s", n, out)
+	}
+	if log := git(t, dir, "log", "--format=%s", "-2"); log != "fix: add b\nfeat: add a" {
+		t.Errorf("история: %q", log)
+	}
+	if st := git(t, dir, "status", "--porcelain"); st != "" {
+		t.Errorf("дерево не чистое: %q", st)
+	}
+}

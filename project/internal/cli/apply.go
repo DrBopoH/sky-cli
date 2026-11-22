@@ -68,6 +68,9 @@ func runApply(a *App, env Env, args []string) error {
 		for _, n := range res.Notes {
 			fmt.Fprintf(env.Out, "  · %s\n", n)
 		}
+		if res.Commit != "" {
+			fmt.Fprintf(env.Out, "● коммит %s\n", res.Commit)
+		}
 		rel, _ := filepath.Rel(l.Root, res.Stage)
 		fmt.Fprintf(env.Out, "● запись %s\n", filepath.ToSlash(rel))
 	}

@@ -14,9 +14,10 @@ type Line struct {
 }
 
 type Result struct {
-	Stage string // папка записи в .sky/stages/
-	Lines []Line
-	Notes []string
+	Stage  string // папка записи в .sky/stages/
+	Commit string // «хэш сообщение» созданного коммита; пусто — коммита не было
+	Lines  []Line
+	Notes  []string
 }
 
 // Run применяет один патч. Проверка и план строятся до любой записи; ошибка при записи откатывает уже сделанное.
@@ -47,6 +48,31 @@ func Run(root, stagesDir, patchPath string) (Result, error) {
 			return Result{Stage: stage}, fmt.Errorf("%w; откат не завершён, снимок в %s: %v", err, stage, rerr)
 		}
 		return fail(err)
+	}
+	if plan.Commit != "" {
+		paths := make([]string, len(changes))
+		for i, c := range changes {
+			paths[i] = c.Path
+		}
+		hash, skipped, err := commitPaths(root, plan.Commit, paths)
+		for _, p := range skipped {
+			res.Notes = append(res.Notes, p+": в .gitignore, в коммит не включён")
+		}
+		if err != nil {
+			unstage(root, paths)
+			if rerr := Restore(root, stage); rerr != nil {
+				return Result{Stage: stage}, fmt.Errorf("%w; откат не завершён, снимок в %s: %v", err, stage, rerr)
+			}
+			return fail(err)
+		}
+		switch {
+		case hash != "":
+			res.Commit = hash + " " + plan.Commit
+		case len(paths) == 0:
+			res.Notes = append(res.Notes, "файлы не изменились, коммит не создан")
+		default:
+			res.Notes = append(res.Notes, "в коммит нечего включать, коммит не создан")
+		}
 	}
 	if err := moveFile(patchPath, filepath.Join(stage, filepath.Base(patchPath))); err != nil {
 		return res, fmt.Errorf("файлы записаны, но патч не перенесён в stages: %w", err)

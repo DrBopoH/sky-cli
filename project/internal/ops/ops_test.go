@@ -74,3 +74,19 @@ func TestLookupUnknown(t *testing.T) {
 		t.Fatal("пустой реестр")
 	}
 }
+
+func TestCommitOp(t *testing.T) {
+	op, ok := Lookup("commit")
+	if !ok {
+		t.Fatal("операции commit нет в реестре")
+	}
+	res, err := op.Plan([]string{"fix: something"}, nil)
+	if err != nil || res.Commit != "fix: something" || len(res.Effects) != 0 {
+		t.Fatalf("%+v %v", res, err)
+	}
+	for _, bad := range []string{"", "fix:x", "Fix: x", "fix:  ", "oops: x", "feat: " + strings.Repeat("x", 73)} {
+		if _, err := op.Plan([]string{bad}, nil); err == nil {
+			t.Errorf("%q: ждали ошибку", bad)
+		}
+	}
+}

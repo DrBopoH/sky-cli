@@ -20,6 +20,7 @@ const (
 type Plan struct {
 	Effects []ops.Effect
 	Notes   []string
+	Commit  string // сообщение коммита; пусто — без коммита
 }
 
 // Build читает архив, проверяет его и строит эффекты: сначала операции, потом файлы патча.
@@ -82,6 +83,12 @@ func Build(root, zipPath string) (Plan, error) {
 			res, err := o.Plan(r, w)
 			if err != nil {
 				return Plan{}, fmt.Errorf("операция %s: %w", o.Name, err)
+			}
+			if res.Commit != "" {
+				if plan.Commit != "" {
+					return Plan{}, fmt.Errorf("операция %s: в патче больше одной записи commit", o.Name)
+				}
+				plan.Commit = res.Commit
 			}
 			plan.Effects = append(plan.Effects, res.Effects...)
 			plan.Notes = append(plan.Notes, res.Notes...)

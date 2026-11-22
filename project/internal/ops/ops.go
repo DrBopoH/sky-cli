@@ -30,6 +30,7 @@ type World interface {
 type Result struct {
 	Effects []Effect
 	Notes   []string
+	Commit  string // сообщение коммита из путей патча; делается после записи файлов
 }
 
 type Operation struct {
@@ -39,7 +40,7 @@ type Operation struct {
 	Plan   func(fields []string, w World) (Result, error)
 }
 
-var registry = []Operation{deleteOp}
+var registry = []Operation{deleteOp, commitOp}
 
 func All() []Operation { return append([]Operation(nil), registry...) }
 
