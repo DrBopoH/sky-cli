@@ -432,3 +432,46 @@ func TestInitBrokenLicenseStopsBeforeWriting(t *testing.T) {
 		t.Fatalf("%d %s", code, errs)
 	}
 }
+
+func TestCommitCommand(t *testing.T) {
+	dir := gitDir(t)
+	run(New(), dir, "init")
+	os.WriteFile(filepath.Join(dir, "README.md"), []byte("правка\n"), 0o644)
+	os.WriteFile(filepath.Join(dir, "new.txt"), []byte("новый\n"), 0o644)
+	os.WriteFile(filepath.Join(dir, "ignored.db"), []byte("x"), 0o644)
+
+	code, out, errs := run(New(), dir, "commit", "docs: edit readme")
+	if code != 0 {
+		t.Fatalf("%d %s %s", code, out, errs)
+	}
+	if !strings.Contains(out, "docs: edit readme") || !strings.Contains(out, "? new.txt") || strings.Contains(out, "ignored.db") {
+		t.Errorf("вывод: %s", out)
+	}
+	if files := git(t, dir, "show", "--name-only", "--format=", "HEAD"); files != "README.md" {
+		t.Errorf("в коммите: %q", files)
+	}
+	if code, _, errs := run(New(), dir, "commit", "docs: again"); code != 1 || !strings.Contains(errs, "нечего") {
+		t.Errorf("повторно: %d %s", code, errs)
+	}
+}
+
+func TestCommitCommandArgs(t *testing.T) {
+	dir := gitDir(t)
+	run(New(), dir, "init")
+	os.WriteFile(filepath.Join(dir, "README.md"), []byte("правка\n"), 0o644)
+	for _, args := range [][]string{{"commit"}, {"commit", "feat:", "two"}, {"commit", "no type"}, {"commit", "feat: " + strings.Repeat("x", 73)}} {
+		if code, _, _ := run(New(), dir, args...); code != 1 {
+			t.Errorf("%v: ждали отказ", args)
+		}
+	}
+	if st := git(t, dir, "status", "--porcelain", "--untracked-files=no"); st == "" {
+		t.Error("отказ не должен коммитить")
+	}
+}
+
+func TestCommitNeedsInit(t *testing.T) {
+	dir := gitDir(t)
+	if code, _, errs := run(New(), dir, "commit", "fix: x"); code != 1 || !strings.Contains(errs, "sky init") {
+		t.Errorf("%d %s", code, errs)
+	}
+}
