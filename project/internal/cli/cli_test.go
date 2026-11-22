@@ -503,3 +503,40 @@ func TestCommitNewFlag(t *testing.T) {
 		t.Errorf("дерево не чистое: %q", st)
 	}
 }
+
+func TestRollbackCommand(t *testing.T) {
+	dir, inbox := project(t)
+	zipPatch(t, filepath.Join(inbox, "patch-1.zip"), map[string]string{
+		"project/a.txt": "a\n", ".sky/operation/commit": "feat: add a\n",
+	})
+	if code, out, errs := run(New(), dir, "apply"); code != 0 {
+		t.Fatalf("%d %s %s", code, out, errs)
+	}
+	code, out, _ := run(New(), dir, "rollback", "list")
+	if code != 0 || !strings.Contains(out, "0001  patch-1.zip  файлов: 1  коммит ") {
+		t.Fatalf("list: %d %s", code, out)
+	}
+	code, out, errs := run(New(), dir, "rollback")
+	if code != 0 || !strings.Contains(out, "- project/a.txt") || !strings.Contains(out, "снят") {
+		t.Fatalf("rollback: %d %s %s", code, out, errs)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "project", "a.txt")); err == nil {
+		t.Error("a.txt должен быть удалён")
+	}
+	if n := git(t, dir, "rev-list", "--count", "HEAD"); n != "1" {
+		t.Errorf("коммитов: %s", n)
+	}
+	if code, _, _ := run(New(), dir, "rollback", "x"); code != 1 {
+		t.Error("неизвестный аргумент")
+	}
+}
+
+func TestRollbackEmpty(t *testing.T) {
+	dir, _ := project(t)
+	if code, _, errs := run(New(), dir, "rollback"); code != 1 || !strings.Contains(errs, "нет записей") {
+		t.Errorf("%d %s", code, errs)
+	}
+	if code, out, _ := run(New(), dir, "rollback", "list"); code != 0 || !strings.Contains(out, "записей нет") {
+		t.Errorf("list: %d %s", code, out)
+	}
+}

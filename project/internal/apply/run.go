@@ -68,6 +68,9 @@ func Run(root, stagesDir, patchPath string) (Result, error) {
 		switch {
 		case hash != "":
 			res.Commit = hash + " " + plan.Commit
+			if full, err := git(root, "rev-parse", "HEAD"); err == nil {
+				noteCommit(stage, full)
+			}
 		case len(paths) == 0:
 			res.Notes = append(res.Notes, "файлы не изменились, коммит не создан")
 		default:
