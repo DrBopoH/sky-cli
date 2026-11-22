@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/DrBopoH/sky-cli/internal/conf"
+	"github.com/DrBopoH/sky-cli/internal/ops"
 	"github.com/DrBopoH/sky-cli/internal/readme"
 	"github.com/DrBopoH/sky-cli/internal/repo"
 	"github.com/DrBopoH/sky-cli/internal/version"
@@ -31,7 +32,7 @@ type App struct {
 }
 
 func New() *App {
-	return &App{Commands: []Command{initCommand()}}
+	return &App{Commands: []Command{initCommand(), applyCommand()}}
 }
 
 // Entries — команды для readme.md: реестр плюс встроенные help и version.
@@ -48,7 +49,11 @@ func (a *App) Entries() []readme.Entry {
 
 // Heal приводит .sky/readme/ к генерируемому набору: недостающее создаёт, изменённое и лишнее убирает.
 func (a *App) Heal(l repo.Layout) ([]repo.Change, error) {
-	files := readme.Files(a.Entries(), conf.Render(conf.Default()))
+	var opEntries []readme.Entry
+	for _, o := range ops.All() {
+		opEntries = append(opEntries, readme.Entry{Usage: o.Name, Summary: o.Doc})
+	}
+	files := readme.Files(a.Entries(), opEntries, conf.Render(conf.Default()))
 	gen := make([]repo.Generated, len(files))
 	for i, f := range files {
 		gen[i] = repo.Generated{Name: f.Name, Content: f.Content}

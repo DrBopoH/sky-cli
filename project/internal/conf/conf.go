@@ -3,7 +3,9 @@ package conf
 
 import (
 	"fmt"
+	"os"
 	"path"
+	"path/filepath"
 	"strings"
 )
 
@@ -117,4 +119,26 @@ func normPath(raw string) (string, error) {
 		return "", fmt.Errorf("«%s»: служебная папка не может быть scope", raw)
 	}
 	return p + "/", nil
+}
+
+// Load читает файл конфига.
+func Load(file string) (Conf, error) {
+	b, err := os.ReadFile(file)
+	if err != nil {
+		return Default(), err
+	}
+	return Parse(string(b))
+}
+
+// InboxDir раскрывает «~» в inbox.
+func (c Conf) InboxDir() (string, error) {
+	p := c.Inbox
+	if p == "~" || strings.HasPrefix(p, "~/") {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", err
+		}
+		p = filepath.Join(home, strings.TrimPrefix(p, "~"))
+	}
+	return p, nil
 }
