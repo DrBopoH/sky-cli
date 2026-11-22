@@ -1,0 +1,12 @@
+*.sublime-project
+*.sublime-workspace
+
+.env
+*.db
+*.db-wal
+*.db-shm
+
+.vscode
+.sky/
+.claude
+.commits/
