@@ -372,3 +372,63 @@ func TestInitHelpIsNeutral(t *testing.T) {
 		}
 	}
 }
+
+func TestInitCreatesLicense(t *testing.T) {
+	dir := gitDir(t)
+	run(New(), dir, "init")
+	l := repo.At(dir)
+	b, _ := os.ReadFile(l.Conf)
+	os.WriteFile(l.Conf, append(b, []byte("\n[license]\ntype = MIT\nholder = Acme Ltd\nyear = 2030\n")...), 0o644)
+	code, out, errs := run(New(), dir, "init")
+	if code != 0 || !strings.Contains(out, "✓ LICENSE создан (MIT)") {
+		t.Fatalf("%d %s %s", code, out, errs)
+	}
+	lic, _ := os.ReadFile(filepath.Join(dir, "LICENSE"))
+	if !strings.Contains(string(lic), "Copyright (c) 2030 Acme Ltd") {
+		t.Errorf("LICENSE: %.80q", lic)
+	}
+	os.WriteFile(filepath.Join(dir, "LICENSE"), []byte("мой"), 0o644)
+	run(New(), dir, "init")
+	if b, _ := os.ReadFile(filepath.Join(dir, "LICENSE")); string(b) != "мой" {
+		t.Error("существующий LICENSE перезаписан")
+	}
+}
+
+func TestInitLicenseUrlCreatesNoFile(t *testing.T) {
+	dir := gitDir(t)
+	run(New(), dir, "init")
+	b, _ := os.ReadFile(repo.At(dir).Conf)
+	os.WriteFile(repo.At(dir).Conf, append(b, []byte("\n[license]\nurl = https://e.org/l\n")...), 0o644)
+	if code, _, errs := run(New(), dir, "init"); code != 0 {
+		t.Fatal(errs)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "LICENSE")); err == nil {
+		t.Error("для url файл создаваться не должен")
+	}
+}
+
+func TestInitLicenseInFirstCommit(t *testing.T) {
+	dir := t.TempDir()
+	os.MkdirAll(filepath.Join(dir, ".sky"), 0o755)
+	exec.Command("git", "-C", dir, "init", "-q", "-b", "main").Run()
+	os.WriteFile(repo.At(dir).Conf, []byte("scope = [project/]\n\n[license]\ntype = Unlicense\n"), 0o644)
+	if code, _, errs := run(New(), dir, "init"); code != 0 {
+		t.Fatal(errs)
+	}
+	if f := git(t, dir, "ls-tree", "-r", "--name-only", "main"); f != ".gitignore\nLICENSE\nREADME.md" {
+		t.Errorf("в первом коммите: %q", f)
+	}
+	if r, _ := os.ReadFile(filepath.Join(dir, "README.md")); !strings.Contains(string(r), "Unlicense, см. [LICENSE]") {
+		t.Errorf("README: %s", r)
+	}
+}
+
+func TestInitBrokenLicenseStopsBeforeWriting(t *testing.T) {
+	dir := gitDir(t)
+	run(New(), dir, "init")
+	b, _ := os.ReadFile(repo.At(dir).Conf)
+	os.WriteFile(repo.At(dir).Conf, append(b, []byte("\n[license]\ntype = MIT\n")...), 0o644)
+	if code, _, errs := run(New(), dir, "init"); code != 1 || !strings.Contains(errs, "holder") {
+		t.Fatalf("%d %s", code, errs)
+	}
+}

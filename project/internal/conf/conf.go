@@ -7,6 +7,8 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+
+	"github.com/DrBopoH/sky-cli/internal/license"
 )
 
 const (
@@ -31,11 +33,30 @@ func (c Commands) Get(kind string) string {
 	return ""
 }
 
+// License — секция [license]: либо Type (встроенный текст с подстановкой), либо URL (своя лицензия по ссылке).
+type License struct {
+	Type   string
+	URL    string
+	Holder string
+	Year   string // пусто — текущий год на момент создания LICENSE
+	Email  string
+}
+
+// Fields — значения для подстановки в текст.
+func (l License) Fields(defaultYear string) license.Fields {
+	y := l.Year
+	if y == "" {
+		y = defaultYear
+	}
+	return license.Fields{Year: y, Holder: l.Holder, Email: l.Email}
+}
+
 type Conf struct {
 	Scope      []string            // папки проекта от корня репозитория
 	Inbox      string              // откуда sky забирает patch*.zip
 	Regulation string              // необязательная ссылка на регламент; sky её не загружает
 	Cmd        map[string]Commands // команды по папкам scope
+	License    *License            // nil — секции [license] нет
 }
 
 func Default() Conf {
@@ -48,10 +69,18 @@ const header = `# sky.conf — пути и команды проекта.
 #   веб:                 scope = [backend/, frontend/]
 # inbox — папка, куда приходят patch*.zip.
 # regulation — необязательная ссылка (URL) на регламент версий; sky её только хранит и не загружает.
-# Секция [папка] задаёт команды этой папки; sky test и sky build запускают их из неё:
+# Секция [папка/] задаёт команды test и build этой папки (их запускает команда сборки sky); папка должна входить в scope:
 #   [project/]
 #   test = go test ./...
 #   build = go build -o bin/app .
+# Секция [license] — лицензия проекта; sky init создаёт по ней файл LICENSE, если его нет:
+#   [license]
+#   type = MIT
+#   holder = Имя автора или компании
+#   year = ГГГГ
+#   email = name@example.com
+# type — MIT, BSD-3-Clause, ISC или Unlicense; holder нужен всем, кроме Unlicense; year необязателен (по умолчанию текущий год);
+# email необязателен и добавляется после holder. Вместо type можно дать url = https://… — свою лицензию по ссылке: файл не создаётся.
 `
 
 func Render(c Conf) string {
@@ -74,6 +103,14 @@ func Render(c Conf) string {
 			fmt.Fprintf(&b, "build = %s\n", cmd.Build)
 		}
 	}
+	if l := c.License; l != nil {
+		b.WriteString("\n[license]\n")
+		for _, kv := range [][2]string{{"type", l.Type}, {"url", l.URL}, {"holder", l.Holder}, {"year", l.Year}, {"email", l.Email}} {
+			if kv[1] != "" {
+				fmt.Fprintf(&b, "%s = %s\n", kv[0], kv[1])
+			}
+		}
+	}
 	return b.String()
 }
 
@@ -89,11 +126,18 @@ func Parse(src string) (Conf, error) {
 		at := func(err error) error { return fmt.Errorf("sky.conf:%d: %w", i+1, err) }
 		if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
 			name := strings.TrimSpace(line[1 : len(line)-1])
+			if name == "license" {
+				section = "license"
+				if c.License == nil {
+					c.License = &License{}
+				}
+				continue
+			}
 			if strings.ContainsAny(name, ", \t") {
 				return c, at(fmt.Errorf("секция — одна папка, а не список"))
 			}
 			if !strings.HasSuffix(name, "/") {
-				return c, at(fmt.Errorf("секция папки пишется со слэшем: [%s/]", name))
+				return c, at(fmt.Errorf("секция папки пишется со слэшем: [%s/] (без слэша бывают только ключевые секции, сейчас — [license])", name))
 			}
 			p, err := normPath(name)
 			if err != nil {
@@ -107,6 +151,32 @@ func Parse(src string) (Conf, error) {
 			return c, at(fmt.Errorf("нужен формат «ключ = значение»"))
 		}
 		key, val = strings.TrimSpace(key), strings.TrimSpace(val)
+		if section == "license" {
+			if val == "" {
+				return c, at(fmt.Errorf("%s пуст", key))
+			}
+			switch key {
+			case "type":
+				c.License.Type = val
+			case "url":
+				if !strings.HasPrefix(val, "https://") && !strings.HasPrefix(val, "http://") {
+					return c, at(fmt.Errorf("url — ссылка вида https://…"))
+				}
+				c.License.URL = val
+			case "holder":
+				c.License.Holder = val
+			case "year":
+				if len(val) != 4 || strings.Trim(val, "0123456789") != "" {
+					return c, at(fmt.Errorf("year — четыре цифры"))
+				}
+				c.License.Year = val
+			case "email":
+				c.License.Email = val
+			default:
+				return c, at(fmt.Errorf("в секции [license] есть только type, url, holder, year и email, а не «%s»", key))
+			}
+			continue
+		}
 		if section != "" {
 			cmd := c.Cmd[section]
 			switch key {
@@ -145,6 +215,20 @@ func Parse(src string) (Conf, error) {
 			c.Regulation = val
 		default:
 			return c, at(fmt.Errorf("неизвестный ключ «%s»", key))
+		}
+	}
+	if l := c.License; l != nil {
+		switch {
+		case l.Type != "" && l.URL != "":
+			return c, fmt.Errorf("sky.conf: в [license] нужно одно из двух: type или url")
+		case l.Type == "" && l.URL == "":
+			return c, fmt.Errorf("sky.conf: в [license] не задан ни type, ни url")
+		case l.Type != "":
+			if err := license.Check(l.Type, l.Fields("2000")); err != nil {
+				return c, fmt.Errorf("sky.conf: [license]: %w", err)
+			}
+		case l.Holder != "" || l.Year != "" || l.Email != "":
+			return c, fmt.Errorf("sky.conf: holder, year и email в [license] работают только с type")
 		}
 	}
 	for s := range c.Cmd {

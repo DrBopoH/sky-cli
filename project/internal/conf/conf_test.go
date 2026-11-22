@@ -99,3 +99,55 @@ func TestRenderKeepsCommandsOnlyForScope(t *testing.T) {
 		t.Fatalf("%s", out)
 	}
 }
+
+func TestLicenseSection(t *testing.T) {
+	src := "scope = [p/]\n\n[license]\ntype = MIT\nholder = Acme Ltd\nyear = 2030\nemail = a@acme.test\n"
+	c, err := Parse(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := &License{Type: "MIT", Holder: "Acme Ltd", Year: "2030", Email: "a@acme.test"}
+	if !reflect.DeepEqual(c.License, want) {
+		t.Fatalf("%+v", c.License)
+	}
+	back, err := Parse(Render(c))
+	if err != nil || !reflect.DeepEqual(back, c) {
+		t.Fatalf("круговой обмен: %+v %v", back.License, err)
+	}
+	if f := (License{Holder: "H"}).Fields("2031"); f.Year != "2031" || f.Holder != "H" {
+		t.Errorf("год по умолчанию: %+v", f)
+	}
+
+	c, err = Parse("[license]\nurl = https://e.org/l\n")
+	if err != nil || c.License.URL != "https://e.org/l" {
+		t.Fatalf("url: %+v %v", c.License, err)
+	}
+	if back, err := Parse(Render(c)); err != nil || !reflect.DeepEqual(back, c) {
+		t.Fatalf("url, круговой обмен: %v", err)
+	}
+	if c, _ := Parse("scope = [p/]\n"); c.License != nil {
+		t.Error("без секции License должен быть nil")
+	}
+}
+
+func TestLicenseErrors(t *testing.T) {
+	for _, bad := range []string{
+		"[license]\n", // пустая секция
+		"[license]\ntype = MIT\nurl = https://e.org\nholder = A\n", // оба
+		"[license]\ntype = MIT\n",                                  // нет holder
+		"[license]\ntype = GPL-9\nholder = A\n",                    // неизвестный тип
+		"[license]\nurl = e.org\n",                                 // не ссылка
+		"[license]\nurl = https://e.org\nholder = A\n",             // поле только для type
+		"[license]\ntype = MIT\nholder = A\nyear = 20\n",           // год
+		"[license]\ntype = MIT\nholder = A\ncolor = red\n",         // ключ
+		"[license]\ntype =\n",                                      // пусто
+		"[licence]\ntype = MIT\n",                                  // опечатка: не папка и не ключевая секция
+	} {
+		if _, err := Parse(bad); err == nil {
+			t.Errorf("%q: ждали ошибку", bad)
+		}
+	}
+	if _, err := Parse("[license]\ntype = Unlicense\n"); err != nil {
+		t.Errorf("Unlicense без holder: %v", err)
+	}
+}

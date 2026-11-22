@@ -5,8 +5,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
+	"time"
 
 	"github.com/DrBopoH/sky-cli/internal/conf"
+	"github.com/DrBopoH/sky-cli/internal/license"
 	"github.com/DrBopoH/sky-cli/internal/repo"
 	"github.com/DrBopoH/sky-cli/internal/scaffold"
 )
@@ -18,7 +21,7 @@ func initCommand() Command {
 	return Command{
 		Name:    "init",
 		Usage:   "sky init [пути…]",
-		Summary: "завести проект: git-репозиторий (если его нет), первый коммит в main и ветку dev (в новом репозитории), папки scope (по умолчанию project/), README.md и .gitignore (если их нет), .sky/; напр. sky init backend/ frontend/",
+		Summary: "завести проект: git-репозиторий (если его нет), первый коммит в main и ветку dev (в новом репозитории), папки scope (по умолчанию project/), README.md, .gitignore и LICENSE по [license] (если их нет), .sky/; напр. sky init backend/ frontend/",
 		Help:    initHelp,
 		Run:     runInit,
 	}
@@ -112,13 +115,27 @@ func scaffoldFiles(env Env, l repo.Layout, c conf.Conf) ([]string, error) {
 	} else if added {
 		fmt.Fprintln(env.Out, "✓ .gitignore: добавлено .sky/")
 	}
-	ok, err = repo.WriteIfAbsent(filepath.Join(l.Root, "README.md"), []byte(scaffold.Readme(filepath.Base(l.Root), c.Scope)))
+	ok, err = repo.WriteIfAbsent(filepath.Join(l.Root, "README.md"), []byte(scaffold.Readme(filepath.Base(l.Root), c.Scope, c.License)))
 	if err != nil {
 		return nil, err
 	}
 	if ok {
 		made = append(made, "README.md")
 		fmt.Fprintln(env.Out, "✓ README.md создан (шаблон)")
+	}
+	if lic := c.License; lic != nil && lic.Type != "" {
+		text, err := license.Render(lic.Type, lic.Fields(strconv.Itoa(time.Now().Year())))
+		if err != nil {
+			return nil, err
+		}
+		ok, err = repo.WriteIfAbsent(filepath.Join(l.Root, "LICENSE"), []byte(text))
+		if err != nil {
+			return nil, err
+		}
+		if ok {
+			made = append(made, "LICENSE")
+			fmt.Fprintf(env.Out, "✓ LICENSE создан (%s)\n", lic.Type)
+		}
 	}
 	return made, nil
 }
