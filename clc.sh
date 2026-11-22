@@ -10,7 +10,7 @@ DL=${ZOE_DL:-$HOME/Downloads}
 mkdir -p "$DL"
 DL=$(cd "$DL" && pwd)
 
-BE=backend
+BE=project
 FE=frontend
 CL=.claude                  # рабочий файл Claude (в .gitignore)
 CM=.commits                 # служебная папка (в .gitignore)
