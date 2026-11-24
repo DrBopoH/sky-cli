@@ -243,21 +243,9 @@ func Undo(root, historyDir string, n int) (Result, []Entry, error) {
 	if err != nil {
 		return Result{}, nil, err
 	}
-	k := 0
-	for _, e := range es {
-		if e.Commit == "" || !gitOK(root, "merge-base", "--is-ancestor", e.Commit, "HEAD") {
-			continue // коммита не было или он уже снят
-		}
-		top, err := git(root, "rev-parse", fmt.Sprintf("HEAD~%d", k))
-		if err != nil || top != e.Commit {
-			return Result{}, es, fmt.Errorf("запись %s создала коммит %.7s, но он не лежит подряд на вершине ветки: откат вручную (git)", e.Name, e.Commit)
-		}
-		k++
-	}
-	if k > 0 {
-		if _, err := git(root, "rev-parse", "--verify", "-q", fmt.Sprintf("HEAD~%d", k)); err != nil {
-			return Result{}, es, fmt.Errorf("снимаемые коммиты доходят до корня истории: откат с их снятием не поддерживается")
-		}
+	k, err := topCommits(root, es)
+	if err != nil {
+		return Result{}, es, err
 	}
 	merged := map[string]ops.Effect{}
 	for _, e := range es { // от новых к старым: побеждает самая старая запись
@@ -298,4 +286,57 @@ func Undo(root, historyDir string, n int) (Result, []Entry, error) {
 	}
 	PruneHistory(historyDir)
 	return res, es, nil
+}
+
+// topCommits считает коммиты записей es (новые первыми), которые нужно снять; они должны лежать подряд на вершине ветки.
+// Коммиты, которых уже нет в ветке, пропускаются.
+func topCommits(root string, es []Entry) (int, error) {
+	k := 0
+	for _, e := range es {
+		if e.Commit == "" || !gitOK(root, "merge-base", "--is-ancestor", e.Commit, "HEAD") {
+			continue
+		}
+		top, err := git(root, "rev-parse", fmt.Sprintf("HEAD~%d", k))
+		if err != nil || top != e.Commit {
+			return 0, fmt.Errorf("запись %s создала коммит %.7s, но он не лежит подряд на вершине ветки: откат вручную (git)", e.Name, e.Commit)
+		}
+		k++
+	}
+	if k > 0 {
+		if _, err := git(root, "rev-parse", "--verify", "-q", fmt.Sprintf("HEAD~%d", k)); err != nil {
+			return 0, fmt.Errorf("снимаемые коммиты доходят до корня истории: откат с их снятием не поддерживается")
+		}
+	}
+	return k, nil
+}
+
+// UndoKeep снимает коммиты n последних записей, оставляя файлы как есть (reset --mixed). Записи остаются,
+// у них только пропадает отметка коммита, поэтому обычный откат по-прежнему вернёт их файлы «до».
+func UndoKeep(root, historyDir string, n int) (int, []Entry, error) {
+	es, err := Last(historyDir, n)
+	if err != nil {
+		return 0, nil, err
+	}
+	k, err := topCommits(root, es)
+	if err != nil {
+		return 0, es, err
+	}
+	if k == 0 {
+		return 0, es, fmt.Errorf("в последних записях (%d) нет коммитов, которые можно снять", len(es))
+	}
+	if _, err := git(root, "reset", "-q", "--mixed", fmt.Sprintf("HEAD~%d", k)); err != nil {
+		return 0, es, err
+	}
+	for _, e := range es {
+		if e.Commit == "" {
+			continue
+		}
+		mp := filepath.Join(e.Dir, "manifest.txt")
+		b, err := os.ReadFile(mp)
+		if err != nil {
+			continue
+		}
+		os.WriteFile(mp, []byte(strings.ReplaceAll(string(b), "\n"+commitTag, "\n# был коммит: ")), 0o644)
+	}
+	return k, es, nil
 }

@@ -18,25 +18,27 @@ import (
 func rollbackCommand() Command {
 	return Command{
 		Name:  "rollback",
-		Usage: "sky rollback [--force] [N] | sky rollback list",
+		Usage: "sky rollback [--force | --keep] [N] | sky rollback list",
 		Summary: "вернуться на N патчей назад (по умолчанию 1, не больше 16). Обычный режим идёт по записям .sky/stages/history/: " +
 			"возвращает файлы «до» и снимает созданные патчами коммиты, если они лежат подряд на вершине ветки. " +
 			"--force идёт по полному снимку из .sky/stages/backups/, сделанному перед N-м с конца патчем: файлы проекта становятся как в снимке, " +
-			"коммиты не трогаются (команда лишь печатает их). Сам откат тоже запись, повторный откат возвращает всё назад; list — показать записи",
+			"коммиты не трогаются (команда лишь печатает их). --keep только снимает коммиты этих записей, а файлы оставляет в дереве (так отменяют или переделывают коммит). Записи ручных sky commit откатываются так же, как патчи. Сам откат тоже запись, повторный откат возвращает всё назад; list — показать записи",
 		NeedsInit: true,
 		Run:       withLook(runRollback, false),
 	}
 }
 
-const rollbackUsage = "sky rollback [--force] [N] | sky rollback list"
+const rollbackUsage = "sky rollback [--force | --keep] [N] | sky rollback list"
 
 func runRollback(a *App, env Env, args []string) error {
-	force, list, n := false, false, 1
+	force, keep, list, n := false, false, false, 1
 	numSet := false
 	for _, x := range args {
 		switch {
 		case x == "--force":
 			force = true
+		case x == "--keep":
+			keep = true
 		case x == "list":
 			list = true
 		default:
@@ -47,7 +49,7 @@ func runRollback(a *App, env Env, args []string) error {
 			n, numSet = v, true
 		}
 	}
-	if list && (force || numSet) {
+	if (list && (force || keep || numSet)) || (force && keep) {
 		return fmt.Errorf("%s", rollbackUsage)
 	}
 	l, err := repo.Find(env.Cwd)
@@ -56,6 +58,14 @@ func runRollback(a *App, env Env, args []string) error {
 	}
 	if list {
 		return rollbackList(env, l)
+	}
+	if keep {
+		k, es, err := apply.UndoKeep(l.Root, l.History, n)
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(env.Out, "── --keep: записей %d (%s)\n  · коммитов снято: %d (git reset --mixed HEAD~%d), файлы остались в дереве\n", len(es), names(es), k, k)
+		return nil
 	}
 	if force {
 		return rollbackForce(env, l, n)

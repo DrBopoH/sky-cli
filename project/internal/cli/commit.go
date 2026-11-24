@@ -3,8 +3,10 @@ package cli
 import (
 	"fmt"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
+	"github.com/DrBopoH/sky-cli/internal/apply"
 	"github.com/DrBopoH/sky-cli/internal/ops"
 	"github.com/DrBopoH/sky-cli/internal/repo"
 )
@@ -13,7 +15,7 @@ func commitCommand() Command {
 	return Command{
 		Name:      "commit",
 		Usage:     `sky commit [--new] "тип: текст"`,
-		Summary:   "закоммитить ручные правки одним коммитом: изменения отслеживаемых файлов; --new добавляет и новые файлы (кроме игнорируемых), без него sky их только перечислит; сообщение как у операции commit",
+		Summary:   "закоммитить ручные правки одним коммитом и записать его в .sky/stages/history/ как патч (откатывается тем же sky rollback): изменения отслеживаемых файлов; --new добавляет и новые файлы (кроме игнорируемых), без него sky их только перечислит; сообщение как у операции commit",
 		NeedsInit: true,
 		Run:       withLook(runCommit, false),
 	}
@@ -40,22 +42,19 @@ func runCommit(a *App, env Env, args []string) error {
 	if err != nil {
 		return err
 	}
-	untracked := "--untracked-files=no"
-	if withNew {
-		untracked = "--untracked-files=all"
+	res, err := apply.RunManual(l.Root, l.History, msg, withNew)
+	if err != nil {
+		return err
 	}
-	if gitOut(l.Root, "status", "--porcelain", untracked) == "" {
-		return fmt.Errorf("нечего коммитить (новые файлы коммитятся с --new)")
+	fmt.Fprintf(env.Out, "✓ %s\n", res.Commit)
+	for _, ln := range res.Lines {
+		fmt.Fprintf(env.Out, "  %s %s\n", ln.Mark, ln.Path)
 	}
-	if withNew {
-		if out, err := exec.Command("git", "-C", l.Root, "add", "-A").CombinedOutput(); err != nil {
-			return fmt.Errorf("git add: %v: %s", err, strings.TrimSpace(string(out)))
-		}
+	for _, n := range res.Notes {
+		fmt.Fprintf(env.Out, "  · %s\n", n)
 	}
-	if out, err := exec.Command("git", "-C", l.Root, "commit", "-q", "-a", "-m", msg).CombinedOutput(); err != nil {
-		return fmt.Errorf("git commit: %v: %s", err, strings.TrimSpace(string(out)))
-	}
-	fmt.Fprintf(env.Out, "✓ %s %s\n", gitOut(l.Root, "rev-parse", "--short=7", "HEAD"), msg)
+	rel, _ := filepath.Rel(l.Root, res.Stage)
+	fmt.Fprintf(env.Out, "● запись %s\n", filepath.ToSlash(rel))
 	if un := gitOut(l.Root, "ls-files", "--others", "--exclude-standard"); un != "" {
 		fmt.Fprintln(env.Out, "· новые файлы не включены в коммит (sky commit --new добавит их):")
 		for _, f := range strings.Split(un, "\n") {

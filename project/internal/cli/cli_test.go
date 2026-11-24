@@ -573,6 +573,59 @@ func TestRollbackForce(t *testing.T) {
 	}
 }
 
+func TestManualCommitIsRecord(t *testing.T) {
+	dir := gitDir(t)
+	run(New(), dir, "init")
+	before := git(t, dir, "rev-parse", "HEAD")
+	readme := filepath.Join(dir, "README.md")
+	orig, _ := os.ReadFile(readme)
+	os.WriteFile(readme, []byte("правка\n"), 0o644)
+	os.WriteFile(filepath.Join(dir, "new.txt"), []byte("n\n"), 0o644)
+	code, out, errs := run(New(), dir, "commit", "--new", "docs: edit")
+	if code != 0 || !strings.Contains(out, "~ README.md") || !strings.Contains(out, "+ new.txt") || !strings.Contains(out, "● запись .sky/stages/history/0001-") {
+		t.Fatalf("%d %s %s", code, out, errs)
+	}
+	if _, o, _ := run(New(), dir, "rollback", "list"); !strings.Contains(o, "0001  commit  файлов: 2  коммит ") {
+		t.Errorf("list: %s", o)
+	}
+	// --keep: коммит снят, файлы на месте
+	if code, o, errs := run(New(), dir, "rollback", "--keep"); code != 0 || !strings.Contains(o, "коммитов снято: 1") {
+		t.Fatalf("keep: %d %s %s", code, o, errs)
+	}
+	if git(t, dir, "rev-parse", "HEAD") != before {
+		t.Error("коммит должен быть снят")
+	}
+	if b, _ := os.ReadFile(readme); string(b) != "правка\n" {
+		t.Errorf("--keep не должен трогать файлы: %q", b)
+	}
+	// «amend»: новый коммит и откат без --keep возвращает файлы «до»
+	if code, _, errs := run(New(), dir, "commit", "--new", "docs: edit again"); code != 0 {
+		t.Fatal(errs)
+	}
+	if code, o, errs := run(New(), dir, "rollback"); code != 0 {
+		t.Fatalf("%d %s %s", code, o, errs)
+	}
+	if b, _ := os.ReadFile(readme); string(b) != string(orig) {
+		t.Errorf("откат ручного коммита возвращает файлы: %q", b)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "new.txt")); err == nil {
+		t.Error("new.txt должен быть удалён откатом")
+	}
+	if git(t, dir, "rev-parse", "HEAD") != before {
+		t.Error("коммит должен быть снят")
+	}
+}
+
+func TestRollbackKeepArgs(t *testing.T) {
+	dir, _ := project(t)
+	if code, _, _ := run(New(), dir, "rollback", "--keep", "--force"); code != 1 {
+		t.Error("--keep и --force несовместимы")
+	}
+	if code, _, errs := run(New(), dir, "rollback", "--keep"); code != 1 || !strings.Contains(errs, "нет записей") {
+		t.Errorf("%d %s", code, errs)
+	}
+}
+
 func TestRollbackArgs(t *testing.T) {
 	dir, _ := project(t)
 	for _, a := range [][]string{{"1", "2"}, {"list", "--force"}, {"list", "3"}, {"-1"}} {
