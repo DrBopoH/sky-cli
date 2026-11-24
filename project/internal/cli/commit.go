@@ -4,11 +4,10 @@ import (
 	"fmt"
 	"os/exec"
 	"path/filepath"
-	"slices"
 	"strings"
 
 	"github.com/DrBopoH/sky-cli/internal/apply"
-	"github.com/DrBopoH/sky-cli/internal/ops"
+	"github.com/DrBopoH/sky-cli/internal/commit"
 	"github.com/DrBopoH/sky-cli/internal/repo"
 )
 
@@ -23,14 +22,13 @@ func commitCommand() Command {
 }
 
 func runCommit(a *App, env Env, args []string) error {
-	withNew := false
+	var opts commit.Options
 	var rest []string
 	for _, x := range args {
 		if fl, ok := strings.CutPrefix(x, "--"); ok {
-			if !slices.Contains(ops.CommitFlags, fl) {
-				return fmt.Errorf("неизвестный флаг %s, допустимы: --%s", x, strings.Join(ops.CommitFlags, ", --"))
+			if err := opts.Set(fl); err != nil {
+				return fmt.Errorf("%s: %w", x, err)
 			}
-			withNew = withNew || fl == "new"
 			continue
 		}
 		rest = append(rest, x)
@@ -39,14 +37,14 @@ func runCommit(a *App, env Env, args []string) error {
 		return fmt.Errorf(`сообщение одним аргументом в кавычках: sky commit [--new] "тип: текст"`)
 	}
 	msg := rest[0]
-	if err := ops.CheckCommitMessage(msg); err != nil {
+	if err := commit.CheckMessage(msg); err != nil {
 		return err
 	}
 	l, err := repo.Find(env.Cwd)
 	if err != nil {
 		return err
 	}
-	res, err := apply.RunManual(l.Root, l.History, msg, withNew)
+	res, err := apply.RunManual(l.Root, l.History, msg, opts)
 	if err != nil {
 		return err
 	}

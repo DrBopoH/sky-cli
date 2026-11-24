@@ -5,6 +5,8 @@ package ops
 import (
 	"fmt"
 	"strings"
+
+	"github.com/DrBopoH/sky-cli/internal/commit"
 )
 
 type Kind int
@@ -28,10 +30,10 @@ type World interface {
 }
 
 type Result struct {
-	Effects []Effect
-	Notes   []string
-	Commit  string // сообщение коммита из путей патча; делается после записи файлов
-	New     bool   // флаг new: в коммит идут и прочие новые файлы дерева (как sky commit --new)
+	Effects    []Effect
+	Notes      []string
+	Commit     string         // сообщение коммита из путей патча; делается после записи файлов
+	CommitOpts commit.Options // параметры использования коммита (флаги записи)
 }
 
 type Operation struct {

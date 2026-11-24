@@ -93,9 +93,13 @@ func TestCommitOp(t *testing.T) {
 	if err != nil || res.Commit != "fix: something" || len(res.Effects) != 0 {
 		t.Fatalf("%+v %v", res, err)
 	}
-	for _, bad := range []string{"", "fix:x", "Fix: x", "fix:  ", "oops: x", "feat: " + strings.Repeat("x", 73)} {
-		if _, err := op.Plan([]string{bad}, nil); err == nil {
-			t.Errorf("%q: ждали ошибку", bad)
-		}
+	if _, err := op.Plan([]string{"oops: x"}, nil); err == nil {
+		t.Error("сообщение проверяет общее правило commit")
+	}
+	if res, err := op.Plan([]string{"fix: x", "new"}, nil); err != nil || !res.CommitOpts.New {
+		t.Errorf("флаг new: %+v %v", res, err)
+	}
+	if _, err := op.Plan([]string{"fix: x", "all"}, nil); err == nil {
+		t.Error("неизвестный флаг")
 	}
 }

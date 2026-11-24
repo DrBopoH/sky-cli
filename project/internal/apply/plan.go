@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/DrBopoH/sky-cli/internal/commit"
 	"github.com/DrBopoH/sky-cli/internal/ops"
 )
 
@@ -18,10 +19,10 @@ const (
 
 // Plan — всё, что патч собирается сделать; ничего ещё не записано.
 type Plan struct {
-	Effects []ops.Effect
-	Notes   []string
-	Commit  string // сообщение коммита; пусто — без коммита
-	New     bool   // флаг new операции commit
+	Effects    []ops.Effect
+	Notes      []string
+	Commit     string         // сообщение коммита; пусто — без коммита
+	CommitOpts commit.Options // параметры использования коммита
 }
 
 // Build читает архив, проверяет его и строит эффекты: сначала операции, потом файлы патча.
@@ -90,7 +91,7 @@ func Build(root, zipPath string) (Plan, error) {
 					return Plan{}, fmt.Errorf("операция %s: в патче больше одной записи commit", o.Name)
 				}
 				plan.Commit = res.Commit
-				plan.New = res.New
+				plan.CommitOpts = res.CommitOpts
 			}
 			plan.Effects = append(plan.Effects, res.Effects...)
 			plan.Notes = append(plan.Notes, res.Notes...)

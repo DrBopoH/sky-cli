@@ -56,7 +56,7 @@ func Run(root, stagesDir, patchPath string) (Result, error) {
 			paths[i] = c.Path
 			have[c.Path] = true
 		}
-		if plan.New {
+		if plan.CommitOpts.New {
 			fresh, err := untracked(root)
 			if err != nil {
 				unstage(root, paths)

@@ -6,6 +6,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/DrBopoH/sky-cli/internal/commit"
 )
 
 // gitBlob возвращает содержимое файла в HEAD и признак исполняемого; ok=false, если файла в HEAD нет.
@@ -39,9 +41,9 @@ func gitZ(root string, args ...string) ([]string, error) {
 }
 
 // RunManual — ручные правки как запись history/: тот же снимок «до» (версии из HEAD), тот же коммит.
-// Коммитятся изменения отслеживаемых файлов, с withNew ещё и новые (кроме игнорируемых).
+// Коммитятся изменения отслеживаемых файлов, с opts.New ещё и новые (кроме игнорируемых).
 // Пути, которые патч не принял бы (GuardPath), коммитятся, но в запись не попадают.
-func RunManual(root, historyDir, msg string, withNew bool) (Result, error) {
+func RunManual(root, historyDir, msg string, opts commit.Options) (Result, error) {
 	if _, err := git(root, "rev-parse", "--verify", "-q", "HEAD"); err != nil {
 		return Result{}, fmt.Errorf("в репозитории нет коммитов")
 	}
@@ -50,7 +52,7 @@ func RunManual(root, historyDir, msg string, withNew bool) (Result, error) {
 		return Result{}, err
 	}
 	paths := tracked
-	if withNew {
+	if opts.New {
 		fresh, err := untracked(root)
 		if err != nil {
 			return Result{}, err
