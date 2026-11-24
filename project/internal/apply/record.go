@@ -2,6 +2,7 @@ package apply
 
 import (
 	"fmt"
+	"github.com/DrBopoH/sky-cli/internal/history"
 	"os"
 
 	"github.com/DrBopoH/sky-cli/internal/gitx"
@@ -53,7 +54,7 @@ func (r *record) commit(root, msg string, paths []string) (hash string, notes []
 	}
 	if hash != "" {
 		if full, err := gitx.Run(root, "rev-parse", "HEAD"); err == nil {
-			noteCommit(r.stage, full)
+			history.NoteCommit(r.stage, full)
 		}
 	}
 	return hash, notes, nil

@@ -3,6 +3,7 @@ package apply_test
 import (
 	"archive/zip"
 	"bytes"
+	"github.com/DrBopoH/sky-cli/internal/guard"
 	"os"
 	"path/filepath"
 	"strings"
@@ -328,12 +329,12 @@ func TestStageNumbering(t *testing.T) {
 
 func TestGuardPath(t *testing.T) {
 	for _, ok := range []string{"a.txt", "dir/sub/f.go", ".github/ci.yml", ".sky/clouds/n.md", ".sky/clouds/d/n.md", "имя с пробелом.txt", ".gitignore", ".env.example"} {
-		if err := apply.GuardPath(ok); err != nil {
+		if err := guard.Path(ok); err != nil {
 			t.Errorf("%q должен проходить: %v", ok, err)
 		}
 	}
 	for _, bad := range []string{"", "/a", "../a", "a/../b", "./a", "a//b", ".git/x", ".sky", ".sky/clouds", ".sky/sky.conf", "x.sqlite-wal", "id.key", ".env"} {
-		if apply.GuardPath(bad) == nil {
+		if guard.Path(bad) == nil {
 			t.Errorf("%q должен отклоняться", bad)
 		}
 	}

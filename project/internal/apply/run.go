@@ -3,6 +3,8 @@ package apply
 import (
 	"errors"
 	"fmt"
+	"github.com/DrBopoH/sky-cli/internal/guard"
+	"github.com/DrBopoH/sky-cli/internal/history"
 	"io"
 	"os"
 	"path/filepath"
@@ -54,13 +56,13 @@ func Run(root, stagesDir, patchPath string, plan Plan) (Result, error) {
 			}
 			var extra []string
 			for _, p := range fresh {
-				if have[p] || GuardPath(p) != nil {
+				if have[p] || guard.Path(p) != nil {
 					continue
 				}
 				extra = append(extra, p)
 				res.Lines = append(res.Lines, Line{"+", p})
 			}
-			noteCreated(rec.stage, extra)
+			history.NoteCreated(rec.stage, StCreated, extra)
 			paths = append(paths, extra...)
 		}
 		hash, notes, err := rec.commit(root, plan.Commit, paths)
@@ -81,7 +83,7 @@ func Run(root, stagesDir, patchPath string, plan Plan) (Result, error) {
 		return res, fmt.Errorf("файлы записаны, но патч не перенесён в stages: %w", err)
 	}
 	res.Lines = append(res.Lines, marks(changes, same)...)
-	PruneHistory(stagesDir)
+	history.Prune(stagesDir)
 	return res, nil
 }
 

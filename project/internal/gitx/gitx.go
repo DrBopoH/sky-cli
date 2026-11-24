@@ -5,7 +5,10 @@ package gitx
 import (
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
+	"sort"
 	"strings"
 )
 
@@ -137,4 +140,21 @@ func Unstage(root string, paths []string) {
 		return
 	}
 	OK(root, append([]string{"rm", "--cached", "-r", "-q", "--ignore-unmatch", "--"}, paths...)...)
+}
+
+// Present — файлы репозитория по версии git, которые есть на диске: отслеживаемые и новые без игнорируемых, по алфавиту.
+func Present(root string) []string {
+	all, err := Visible(root)
+	if err != nil {
+		return nil
+	}
+	var ps []string
+	for _, p := range all {
+		if _, err := os.Lstat(filepath.Join(root, p)); err != nil {
+			continue // удалён с диска, но ещё в индексе
+		}
+		ps = append(ps, p)
+	}
+	sort.Strings(ps)
+	return ps
 }

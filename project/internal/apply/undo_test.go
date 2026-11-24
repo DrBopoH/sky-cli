@@ -1,6 +1,7 @@
 package apply_test
 
 import (
+	"github.com/DrBopoH/sky-cli/internal/history"
 	"strings"
 	"testing"
 
@@ -20,7 +21,7 @@ func TestUndoRestoresFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 	res, es, err := apply.Undo(e.root, e.stages, 1)
-	var target apply.Entry
+	var target history.Entry
 	if len(es) > 0 {
 		target = es[0]
 	}
@@ -66,7 +67,7 @@ func TestUndoTwiceRedoes(t *testing.T) {
 	if _, ok := e.read("n.txt"); !ok {
 		t.Error("n.txt должен вернуться")
 	}
-	list, _ := apply.Entries(e.stages)
+	list, _ := history.Entries(e.stages)
 	if len(list) != 3 {
 		t.Errorf("записей: %d", len(list))
 	}
@@ -143,7 +144,7 @@ func TestUndoRefusesWhenCommitIsNotHead(t *testing.T) {
 	if _, ok := e.read("x.txt"); !ok || g(t, e.root, "rev-parse", "HEAD") != head {
 		t.Error("при отказе ничего не меняется")
 	}
-	if list, _ := apply.Entries(e.stages); len(list) != 1 {
+	if list, _ := history.Entries(e.stages); len(list) != 1 {
 		t.Errorf("при отказе новой записи быть не должно: %d", len(list))
 	}
 }
@@ -152,7 +153,7 @@ func TestEntries(t *testing.T) {
 	e := gitEnv(t)
 	e.run(e.patch(t, "patch-a.zip", entry{name: "x.txt", body: "x\n"}, entry{name: ".sky/operation/commit", body: "feat: x\n"}))
 	e.run(e.patch(t, "patch-b.zip", entry{name: "y.txt", body: "y\n"}))
-	list, err := apply.Entries(e.stages)
+	list, err := history.Entries(e.stages)
 	if err != nil || len(list) != 2 {
 		t.Fatalf("%v %v", list, err)
 	}
@@ -225,16 +226,16 @@ func TestUndoNCommits(t *testing.T) {
 
 func TestHistoryPrunedTo16(t *testing.T) {
 	e := newEnv(t)
-	for i := 0; i < apply.KeepHistory+3; i++ {
+	for i := 0; i < history.Keep+3; i++ {
 		if _, err := e.run(e.patch(t, "patch-n.zip", entry{name: "a.txt", body: string(rune('a'+i%20)) + "\n"})); err != nil {
 			t.Fatal(err)
 		}
 	}
-	list, _ := apply.Entries(e.stages)
-	if len(list) != apply.KeepHistory {
+	list, _ := history.Entries(e.stages)
+	if len(list) != history.Keep {
 		t.Fatalf("записей: %d", len(list))
 	}
-	if list[len(list)-1].Num != apply.KeepHistory+3 {
+	if list[len(list)-1].Num != history.Keep+3 {
 		t.Errorf("новейшая запись потеряна: %d", list[len(list)-1].Num)
 	}
 }
@@ -245,8 +246,8 @@ func TestBackupNoted(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	apply.NoteBackup(res.Stage, "0001-x-before-patch-a.zip")
-	list, _ := apply.Entries(e.stages)
+	history.NoteBackup(res.Stage, "0001-x-before-patch-a.zip")
+	list, _ := history.Entries(e.stages)
 	if list[0].Backup != "0001-x-before-patch-a.zip" {
 		t.Errorf("backup: %q", list[0].Backup)
 	}

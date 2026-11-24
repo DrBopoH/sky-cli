@@ -6,6 +6,7 @@ import (
 	"bytes"
 	_ "embed"
 	"fmt"
+	"github.com/DrBopoH/sky-cli/internal/guard"
 	"io"
 	"os"
 	"path/filepath"
@@ -13,9 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/DrBopoH/sky-cli/internal/apply"
 	"github.com/DrBopoH/sky-cli/internal/gitx"
-	"github.com/DrBopoH/sky-cli/internal/look"
 )
 
 //go:embed text/archive.txt
@@ -146,7 +145,7 @@ func Make(o Options) (Report, error) {
 	var rep Report
 	seen := map[string]bool{}
 	var all []string
-	for _, p := range append(look.Paths(o.Root), skyFiles(o.Root, o.ForChat)...) {
+	for _, p := range append(gitx.Present(o.Root), skyFiles(o.Root, o.ForChat)...) {
 		if !seen[p] && p != ".sky/foryou/archive.md" {
 			seen[p] = true
 			all = append(all, p)
@@ -179,7 +178,7 @@ func Make(o Options) (Report, error) {
 			rep.Skipped = append(rep.Skipped, skip{Path: p, Reason: "не прочитался: " + err.Error()})
 			continue
 		}
-		if apply.IsSensitive(p) {
+		if guard.IsSensitive(p) {
 			rep.Sensitive = append(rep.Sensitive, p)
 		}
 		items = append(items, item{p, fi.Mode().Perm(), b})

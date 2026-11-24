@@ -4,6 +4,8 @@ package work
 
 import (
 	"fmt"
+	"github.com/DrBopoH/sky-cli/internal/guard"
+	"github.com/DrBopoH/sky-cli/internal/history"
 	"os"
 	"path/filepath"
 	"sort"
@@ -11,7 +13,6 @@ import (
 
 	"github.com/DrBopoH/sky-cli/internal/apply"
 	"github.com/DrBopoH/sky-cli/internal/gitx"
-	"github.com/DrBopoH/sky-cli/internal/look"
 	"github.com/DrBopoH/sky-cli/internal/pack"
 	"github.com/DrBopoH/sky-cli/internal/repo"
 )
@@ -45,7 +46,7 @@ func ApplyPatch(l repo.Layout, patch string, plan apply.Planner) (Applied, error
 	if err != nil {
 		return Applied{}, fmt.Errorf("%s: %w", name, err)
 	}
-	apply.NoteBackup(res.Stage, filepath.Base(bk.Zip))
+	history.NoteBackup(res.Stage, filepath.Base(bk.Zip))
 	return Applied{Result: res, Backup: bk.Zip}, nil
 }
 
@@ -57,13 +58,13 @@ func restorable(p string) bool {
 // Forced — результат отката по полному снимку.
 type Forced struct {
 	Result  apply.Result
-	Entries []apply.Entry // откатанные записи, новые первыми
-	Backup  string        // имя снимка, до которого вернулись
+	Entries []history.Entry // откатанные записи, новые первыми
+	Backup  string          // имя снимка, до которого вернулись
 }
 
 // RollbackForce возвращает проект к полному снимку «до» N-го с конца патча. Коммиты не трогаются, о них сообщает Result.Notes.
 func RollbackForce(l repo.Layout, n int) (Forced, error) {
-	es, err := apply.Last(l.History, n)
+	es, err := history.Last(l.History, n)
 	if err != nil {
 		return Forced{}, err
 	}
@@ -85,14 +86,14 @@ func RollbackForce(l repo.Layout, n int) (Forced, error) {
 		if !restorable(p) {
 			continue
 		}
-		if apply.GuardPath(p) != nil {
+		if guard.Path(p) != nil {
 			skipped++
 			continue
 		}
 		effects = append(effects, apply.Effect{Kind: apply.Write, Path: p, Content: f.Data, Exec: f.Exec})
 	}
-	for _, p := range look.Paths(l.Root) {
-		if _, ok := snap[p]; ok || !restorable(p) || apply.GuardPath(p) != nil {
+	for _, p := range gitx.Present(l.Root) {
+		if _, ok := snap[p]; ok || !restorable(p) || guard.Path(p) != nil {
 			continue
 		}
 		fi, err := os.Lstat(filepath.Join(l.Root, filepath.FromSlash(p)))
@@ -107,7 +108,7 @@ func RollbackForce(l repo.Layout, n int) (Forced, error) {
 	if err != nil {
 		return Forced{}, err
 	}
-	apply.PruneHistory(l.History)
+	history.Prune(l.History)
 	var changed []apply.Line
 	for _, ln := range res.Lines {
 		if ln.Mark != "=" {
@@ -118,7 +119,7 @@ func RollbackForce(l repo.Layout, n int) (Forced, error) {
 	if skipped > 0 {
 		res.Notes = append(res.Notes, fmt.Sprintf("пропущено файлов, которые патч не принимает: %d", skipped))
 	}
-	if cs := apply.Commits(es); len(cs) > 0 {
+	if cs := history.Commits(es); len(cs) > 0 {
 		var short []string
 		for _, c := range cs {
 			short = append(short, c[:7])

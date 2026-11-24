@@ -3,6 +3,8 @@ package apply
 import (
 	"archive/zip"
 	"fmt"
+	"github.com/DrBopoH/sky-cli/internal/guard"
+	"github.com/DrBopoH/sky-cli/internal/history"
 	"io"
 	"os"
 	"path/filepath"
@@ -12,174 +14,6 @@ import (
 	"github.com/DrBopoH/sky-cli/internal/gitx"
 	"github.com/DrBopoH/sky-cli/internal/notation"
 )
-
-const (
-	commitTag = "# commit: "
-	backupTag = "# backup: "
-	// KeepHistory — сколько записей хранит history/; столько же патчей можно откатить за раз.
-	KeepHistory = 16
-)
-
-// noteCommit дописывает в manifest.txt записи хэш коммита, созданного патчем: по нему откат снимет коммит.
-func noteCommit(stageDir, full string) {
-	f, err := os.OpenFile(filepath.Join(stageDir, "manifest.txt"), os.O_APPEND|os.O_WRONLY, 0o644)
-	if err != nil {
-		return
-	}
-	defer f.Close()
-	fmt.Fprintf(f, "%s%s\n", commitTag, full)
-}
-
-// noteCreated дописывает в manifest.txt файлы, которые коммит с флагом new подобрал в дереве: откат их удалит.
-func noteCreated(stageDir string, paths []string) {
-	if len(paths) == 0 {
-		return
-	}
-	f, err := os.OpenFile(filepath.Join(stageDir, "manifest.txt"), os.O_APPEND|os.O_WRONLY, 0o644)
-	if err != nil {
-		return
-	}
-	defer f.Close()
-	for _, p := range paths {
-		fmt.Fprintf(f, "%s\t%s\n", StCreated, p)
-	}
-}
-
-// NoteBackup дописывает в manifest.txt записи имя полного снимка «до».
-func NoteBackup(stageDir, name string) {
-	f, err := os.OpenFile(filepath.Join(stageDir, "manifest.txt"), os.O_APPEND|os.O_WRONLY, 0o644)
-	if err != nil {
-		return
-	}
-	defer f.Close()
-	fmt.Fprintf(f, "%s%s\n", backupTag, name)
-}
-
-// PruneHistory оставляет KeepHistory последних записей.
-func PruneHistory(historyDir string) {
-	es, _ := Entries(historyDir)
-	for len(es) > KeepHistory {
-		os.RemoveAll(es[0].Dir)
-		es = es[1:]
-	}
-}
-
-// Entry — одна запись в .sky/stages/history/.
-type Entry struct {
-	Name   string // NNNN-время-имя
-	Num    int
-	Source string // имя патча или «откат …» из manifest.txt
-	Files  int
-	Commit string // полный хэш коммита патча; пусто — коммита не было
-	Backup string // имя полного снимка «до» в backups/; пусто — снимка нет (откат)
-	Dir    string
-}
-
-func readStage(dir string) (Entry, error) {
-	e := Entry{Dir: dir, Name: filepath.Base(dir)}
-	if _, err := fmt.Sscanf(e.Name, "%04d-", &e.Num); err != nil {
-		return e, fmt.Errorf("%s: нет номера записи", e.Name)
-	}
-	b, err := os.ReadFile(filepath.Join(dir, "manifest.txt"))
-	if err != nil {
-		return e, err
-	}
-	for _, line := range strings.Split(string(b), "\n") {
-		switch {
-		case strings.HasPrefix(line, "# patch: "):
-			e.Source = strings.TrimPrefix(line, "# patch: ")
-		case strings.HasPrefix(line, backupTag):
-			e.Backup = strings.TrimSpace(strings.TrimPrefix(line, backupTag))
-		case strings.HasPrefix(line, commitTag):
-			e.Commit = strings.TrimSpace(strings.TrimPrefix(line, commitTag))
-		case line != "" && !strings.HasPrefix(line, "#"):
-			e.Files++
-		}
-	}
-	return e, nil
-}
-
-// Entries — записи stages/ от старых к новым.
-func Entries(stagesDir string) ([]Entry, error) {
-	ds, err := os.ReadDir(stagesDir)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil
-		}
-		return nil, err
-	}
-	var out []Entry
-	for _, d := range ds {
-		if !d.IsDir() {
-			continue
-		}
-		e, err := readStage(filepath.Join(stagesDir, d.Name()))
-		if err != nil {
-			continue // посторонняя папка
-		}
-		out = append(out, e)
-	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Num < out[j].Num })
-	return out, nil
-}
-
-// inverse строит эффекты, обратные записи: созданное удаляется, изменённое и удалённое возвращается из before.zip.
-func inverse(e Entry) ([]Effect, error) {
-	man, err := os.ReadFile(filepath.Join(e.Dir, "manifest.txt"))
-	if err != nil {
-		return nil, err
-	}
-	recs, err := notation.Parse(string(man), 2)
-	if err != nil {
-		return nil, err
-	}
-	zr, err := zip.OpenReader(filepath.Join(e.Dir, "before.zip"))
-	if err != nil {
-		return nil, err
-	}
-	defer zr.Close()
-	old := map[string]*zip.File{}
-	for _, f := range zr.File {
-		old[f.Name] = f
-	}
-	var out []Effect
-	for _, r := range recs {
-		status, p := r[0], r[1]
-		if err := GuardPath(p); err != nil {
-			return nil, err
-		}
-		if status == StCreated {
-			out = append(out, Effect{Kind: Delete, Path: p})
-			continue
-		}
-		f, ok := old[p]
-		if !ok {
-			return nil, fmt.Errorf("%s: нет в снимке «до»", p)
-		}
-		rc, err := f.Open()
-		if err != nil {
-			return nil, err
-		}
-		b, err := io.ReadAll(rc)
-		rc.Close()
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, Effect{Kind: Write, Path: p, Content: b, Exec: f.Mode()&0o111 != 0})
-	}
-	return out, nil
-}
-
-// Commits возвращает хэши коммитов записей (пустые пропускаются).
-func Commits(es []Entry) []string {
-	var out []string
-	for _, e := range es {
-		if e.Commit != "" {
-			out = append(out, e.Commit)
-		}
-	}
-	return out
-}
 
 // RunEffects применяет эффекты как новую запись history/ (с «до» затронутых файлов), при ошибке откатывает.
 func RunEffects(root, historyDir, dirName, source string, effects []Effect) (Result, error) {
@@ -200,29 +34,7 @@ func RunEffects(root, historyDir, dirName, source string, effects []Effect) (Res
 	return Result{Stage: rec.stage, Lines: marks(changes, same)}, nil
 }
 
-// Last возвращает n последних записей (новые первыми).
-func Last(historyDir string, n int) ([]Entry, error) {
-	list, err := Entries(historyDir)
-	if err != nil {
-		return nil, err
-	}
-	if len(list) == 0 {
-		return nil, fmt.Errorf("в .sky/stages/history/ нет записей, откатывать нечего")
-	}
-	if n < 1 || n > KeepHistory {
-		return nil, fmt.Errorf("глубина отката от 1 до %d", KeepHistory)
-	}
-	if n > len(list) {
-		return nil, fmt.Errorf("в history/ записей: %d, откатить %d нельзя", len(list), n)
-	}
-	out := make([]Entry, 0, n)
-	for i := 0; i < n; i++ {
-		out = append(out, list[len(list)-1-i])
-	}
-	return out, nil
-}
-
-func label(es []Entry) string { // es: новые первыми
+func label(es []history.Entry) string { // es: новые первыми
 	if len(es) == 1 {
 		return fmt.Sprintf("%04d", es[0].Num)
 	}
@@ -231,8 +43,8 @@ func label(es []Entry) string { // es: новые первыми
 
 // Undo (soft) откатывает n последних записей history/ одной новой записью. Если среди них есть коммиты,
 // они должны подряд лежать на вершине ветки: тогда снимаются (reset --mixed), иначе отказ без изменений.
-func Undo(root, historyDir string, n int) (Result, []Entry, error) {
-	es, err := Last(historyDir, n)
+func Undo(root, historyDir string, n int) (Result, []history.Entry, error) {
+	es, err := history.Last(historyDir, n)
 	if err != nil {
 		return Result{}, nil, err
 	}
@@ -277,13 +89,13 @@ func Undo(root, historyDir string, n int) (Result, []Entry, error) {
 		}
 		res.Notes = append(res.Notes, fmt.Sprintf("коммитов снято: %d (git reset --mixed HEAD~%d)", k, k))
 	}
-	PruneHistory(historyDir)
+	history.Prune(historyDir)
 	return res, es, nil
 }
 
 // topCommits считает коммиты записей es (новые первыми), которые нужно снять; они должны лежать подряд на вершине ветки.
 // Коммиты, которых уже нет в ветке, пропускаются.
-func topCommits(root string, es []Entry) (int, error) {
+func topCommits(root string, es []history.Entry) (int, error) {
 	k := 0
 	for _, e := range es {
 		if e.Commit == "" || !gitx.OK(root, "merge-base", "--is-ancestor", e.Commit, "HEAD") {
@@ -305,8 +117,8 @@ func topCommits(root string, es []Entry) (int, error) {
 
 // UndoKeep снимает коммиты n последних записей, оставляя файлы как есть (reset --mixed). Записи остаются,
 // у них только пропадает отметка коммита, поэтому обычный откат по-прежнему вернёт их файлы «до».
-func UndoKeep(root, historyDir string, n int) (int, []Entry, error) {
-	es, err := Last(historyDir, n)
+func UndoKeep(root, historyDir string, n int) (int, []history.Entry, error) {
+	es, err := history.Last(historyDir, n)
 	if err != nil {
 		return 0, nil, err
 	}
@@ -329,7 +141,54 @@ func UndoKeep(root, historyDir string, n int) (int, []Entry, error) {
 		if err != nil {
 			continue
 		}
-		os.WriteFile(mp, []byte(strings.ReplaceAll(string(b), "\n"+commitTag, "\n# был коммит: ")), 0o644)
+		os.WriteFile(mp, []byte(strings.ReplaceAll(string(b), "\n"+history.CommitTag, "\n# был коммит: ")), 0o644)
 	}
 	return k, es, nil
+}
+
+// inverse строит эффекты, обратные записи: созданное удаляется, изменённое и удалённое возвращается из before.zip.
+func inverse(e history.Entry) ([]Effect, error) {
+	man, err := os.ReadFile(filepath.Join(e.Dir, "manifest.txt"))
+	if err != nil {
+		return nil, err
+	}
+	recs, err := notation.Parse(string(man), 2)
+	if err != nil {
+		return nil, err
+	}
+	zr, err := zip.OpenReader(filepath.Join(e.Dir, "before.zip"))
+	if err != nil {
+		return nil, err
+	}
+	defer zr.Close()
+	old := map[string]*zip.File{}
+	for _, f := range zr.File {
+		old[f.Name] = f
+	}
+	var out []Effect
+	for _, r := range recs {
+		status, p := r[0], r[1]
+		if err := guard.Path(p); err != nil {
+			return nil, err
+		}
+		if status == StCreated {
+			out = append(out, Effect{Kind: Delete, Path: p})
+			continue
+		}
+		f, ok := old[p]
+		if !ok {
+			return nil, fmt.Errorf("%s: нет в снимке «до»", p)
+		}
+		rc, err := f.Open()
+		if err != nil {
+			return nil, err
+		}
+		b, err := io.ReadAll(rc)
+		rc.Close()
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, Effect{Kind: Write, Path: p, Content: b, Exec: f.Mode()&0o111 != 0})
+	}
+	return out, nil
 }

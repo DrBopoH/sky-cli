@@ -1,13 +1,17 @@
 package apply
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/DrBopoH/sky-cli/internal/guard"
+)
 
 // CheckEffects: единая проверка путей всех эффектов, конфликты «путь дважды» и «файл и папка», выход за корень.
 func CheckEffects(root string, effects []Effect) error {
 	seen := map[string]bool{}
 	dirs := map[string]bool{}
 	for _, e := range effects {
-		if err := GuardPath(e.Path); err != nil {
+		if err := guard.Path(e.Path); err != nil {
 			return err
 		}
 		if seen[e.Path] {
@@ -26,7 +30,7 @@ func CheckEffects(root string, effects []Effect) error {
 		}
 	}
 	for _, e := range effects {
-		if _, err := resolve(root, e.Path); err != nil {
+		if _, err := guard.Resolve(root, e.Path); err != nil {
 			return err
 		}
 	}

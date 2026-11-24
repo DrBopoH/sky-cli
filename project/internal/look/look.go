@@ -3,13 +3,10 @@ package look
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
+	"github.com/DrBopoH/sky-cli/internal/history"
 	"regexp"
-	"sort"
 	"strings"
 
-	"github.com/DrBopoH/sky-cli/internal/apply"
 	"github.com/DrBopoH/sky-cli/internal/conf"
 	"github.com/DrBopoH/sky-cli/internal/gitx"
 )
@@ -53,7 +50,7 @@ func Build(in Input) []File {
 	files := []File{
 		{"status.md", status(in, head, snap)},
 		{"branches.md", branches(in, snap)},
-		{"history.md", history(in, snap)},
+		{"history.md", commitLog(in, snap)},
 		{"tree.md", tree(in, snap)},
 		{"graph.md", graph(in, snap)},
 		{"stages.md", stages(in, snap)},
@@ -115,7 +112,7 @@ func status(in Input, head, snap string) string {
 	} else {
 		fmt.Fprintf(&b, "inbox (%s): %s\n", inbox, strings.Join(in.Patches, ", "))
 	}
-	if es, _ := apply.Entries(in.Stages); len(es) > 0 {
+	if es, _ := history.Entries(in.Stages); len(es) > 0 {
 		e := es[len(es)-1]
 		commit := ""
 		if e.Commit != "" {
@@ -154,7 +151,7 @@ func branches(in Input, snap string) string {
 	return b.String()
 }
 
-func history(in Input, snap string) string {
+func commitLog(in Input, snap string) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, preHistory+"\n%s\n", MaxBranchCommits, snap)
 	refs := lines(gitx.Try(in.Root, "for-each-ref", "--format=%(refname)", "refs/heads", "refs/remotes"))
@@ -176,24 +173,7 @@ func history(in Input, snap string) string {
 	return b.String()
 }
 
-// Paths — файлы репозитория по версии git: отслеживаемые и новые без игнорируемых; удалённые с диска пропускаются.
-func Paths(root string) []string {
-	all, err := gitx.Visible(root)
-	if err != nil {
-		return nil
-	}
-	var ps []string
-	for _, p := range all {
-		if _, err := os.Lstat(filepath.Join(root, p)); err != nil {
-			continue // удалён с диска, но ещё в индексе
-		}
-		ps = append(ps, p)
-	}
-	sort.Strings(ps)
-	return ps
-}
-
-func paths(in Input) []string { return Paths(in.Root) }
+func paths(in Input) []string { return gitx.Present(in.Root) }
 
 func capped(b *strings.Builder, rows []string) {
 	n := len(rows)
@@ -258,7 +238,7 @@ func graph(in Input, snap string) string {
 func stages(in Input, snap string) string {
 	var b strings.Builder
 	b.WriteString(preStages + "\n" + snap + "\n\n")
-	es, _ := apply.Entries(in.Stages)
+	es, _ := history.Entries(in.Stages)
 	if len(es) == 0 {
 		b.WriteString("записей нет\n")
 		return b.String()

@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"github.com/DrBopoH/sky-cli/internal/history"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -72,7 +73,7 @@ func runRollback(a *App, env Env, args []string) error {
 	return nil
 }
 
-func names(es []apply.Entry) string {
+func names(es []history.Entry) string {
 	var s []string
 	for _, e := range es {
 		s = append(s, e.Name)
@@ -92,7 +93,7 @@ func printResult(env Env, l repo.Layout, res apply.Result) {
 }
 
 func rollbackList(env Env, l repo.Layout) error {
-	list, err := apply.Entries(l.History)
+	list, err := history.Entries(l.History)
 	if err != nil {
 		return err
 	}

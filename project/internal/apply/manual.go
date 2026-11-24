@@ -2,6 +2,8 @@ package apply
 
 import (
 	"fmt"
+	"github.com/DrBopoH/sky-cli/internal/guard"
+	"github.com/DrBopoH/sky-cli/internal/history"
 	"os"
 	"path/filepath"
 
@@ -34,7 +36,7 @@ func RunManual(root, historyDir, msg string, opts commit.Options) (Result, error
 	var changes []change
 	var notes []string
 	for _, p := range paths {
-		if GuardPath(p) != nil {
+		if guard.Path(p) != nil {
 			notes = append(notes, p+": в запись отката не попал (патч такой путь не принимает)")
 			continue
 		}
@@ -65,6 +67,6 @@ func RunManual(root, historyDir, msg string, opts commit.Options) (Result, error
 	if !opts.New {
 		res.Left, _ = gitx.Untracked(root)
 	}
-	PruneHistory(historyDir)
+	history.Prune(historyDir)
 	return res, nil
 }

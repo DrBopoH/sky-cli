@@ -5,6 +5,8 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"github.com/DrBopoH/sky-cli/internal/guard"
+	"github.com/DrBopoH/sky-cli/internal/history"
 	"io"
 	"os"
 	"path/filepath"
@@ -49,7 +51,7 @@ func nextStageDir(stages, patchName string) (string, error) {
 // classify сверяет эффекты с диском: что создаётся, меняется, удаляется; неизменные записи отбрасывает.
 func classify(root string, effects []Effect) (changes []change, same []string, err error) {
 	for _, e := range effects {
-		abs, err := resolve(root, e.Path)
+		abs, err := guard.Resolve(root, e.Path)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -91,7 +93,7 @@ func saveBefore(dir, patchName string, changes []change) error {
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
 	var man strings.Builder
-	fmt.Fprintf(&man, "# patch: %s\n", filepath.Base(patchName))
+	fmt.Fprintf(&man, history.PatchTag+"%s\n", filepath.Base(patchName))
 	for _, c := range changes {
 		fmt.Fprintf(&man, "%s\t%s\n", c.Status, c.Path)
 		if c.Status == StCreated {
@@ -167,7 +169,7 @@ func pruneEmpty(root, abs string) {
 
 func execute(root string, changes []change) error {
 	for _, c := range changes {
-		abs, err := resolve(root, c.Path)
+		abs, err := guard.Resolve(root, c.Path)
 		if err != nil {
 			return err
 		}
@@ -208,7 +210,7 @@ func Restore(root, stageDir string) error {
 	var errs []error
 	for _, r := range recs {
 		status, p := r[0], r[1]
-		abs, err := resolve(root, p)
+		abs, err := guard.Resolve(root, p)
 		if err != nil {
 			errs = append(errs, err)
 			continue

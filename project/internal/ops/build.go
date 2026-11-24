@@ -3,6 +3,7 @@ package ops
 import (
 	"archive/zip"
 	"fmt"
+	"github.com/DrBopoH/sky-cli/internal/guard"
 	"io"
 	"os"
 	"strings"
@@ -55,7 +56,7 @@ func Build(root, zipPath string) (apply.Plan, error) {
 			opFiles[op] = string(body)
 			continue
 		}
-		if err := apply.GuardPath(name); err != nil {
+		if err := guard.Path(name); err != nil {
 			return apply.Plan{}, err
 		}
 		files = append(files, apply.Effect{Kind: apply.Write, Path: name, Content: body, Exec: f.Mode()&0o111 != 0})
