@@ -223,3 +223,48 @@ func TestCommitFailureRollsBack(t *testing.T) {
 		t.Error("патч должен остаться на месте после ошибки")
 	}
 }
+
+func TestCommitOpNewFlagTakesUntracked(t *testing.T) {
+	e := gitEnv(t)
+	e.write(t, "stray.txt", "чужой новый файл\n")
+	e.write(t, "ign.log", "x\n")
+	g(t, e.root, "config", "core.excludesfile", "/dev/null")
+	p := e.patch(t, "patch-a.zip",
+		entry{name: "x.txt", body: "x\n"},
+		entry{name: ".sky/operation/commit", body: "feat: x\tnew\n"},
+	)
+	if _, err := e.run(p); err != nil {
+		t.Fatal(err)
+	}
+	files := g(t, e.root, "show", "--name-only", "--format=", "HEAD")
+	if !strings.Contains(files, "x.txt") || !strings.Contains(files, "stray.txt") {
+		t.Errorf("в коммите: %s", files)
+	}
+	// откат удаляет подобранный файл
+	if _, _, err := Undo(e.root, e.stages, 1); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := e.read("stray.txt"); ok {
+		t.Error("stray.txt должен быть удалён откатом")
+	}
+}
+
+func TestCommitOpWithoutNewLeavesStray(t *testing.T) {
+	e := gitEnv(t)
+	e.write(t, "stray.txt", "чужой\n")
+	p := e.patch(t, "patch-a.zip", entry{name: "x.txt", body: "x\n"}, entry{name: ".sky/operation/commit", body: "feat: x\n"})
+	if _, err := e.run(p); err != nil {
+		t.Fatal(err)
+	}
+	if files := g(t, e.root, "show", "--name-only", "--format=", "HEAD"); strings.Contains(files, "stray.txt") {
+		t.Errorf("без new чужое не берём: %s", files)
+	}
+}
+
+func TestCommitOpUnknownFlag(t *testing.T) {
+	e := gitEnv(t)
+	p := e.patch(t, "patch-a.zip", entry{name: "x.txt", body: "x\n"}, entry{name: ".sky/operation/commit", body: "feat: x\tall\n"})
+	if _, err := e.run(p); err == nil || !strings.Contains(err.Error(), "неизвестный флаг") {
+		t.Errorf("%v", err)
+	}
+}

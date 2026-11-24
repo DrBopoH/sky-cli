@@ -31,11 +31,13 @@ type Result struct {
 	Effects []Effect
 	Notes   []string
 	Commit  string // сообщение коммита из путей патча; делается после записи файлов
+	New     bool   // флаг new: в коммит идут и прочие новые файлы дерева (как sky commit --new)
 }
 
 type Operation struct {
 	Name   string
-	Fields int    // число полей записи
+	Fields int    // число обязательных полей записи
+	Opt    int    // сколько ещё необязательных полей (флаги) может идти следом
 	Doc    string // продолжение строки «- `имя` — …» в readme.md
 	Plan   func(fields []string, w World) (Result, error)
 }
@@ -54,7 +56,10 @@ func Lookup(name string) (Operation, bool) {
 }
 
 // Parse — общая нотация: одна запись на строку, поля через табуляцию, пустые строки и «#…» пропускаются.
-func Parse(src string, fields int) ([][]string, error) {
+func Parse(src string, fields int) ([][]string, error) { return ParseRange(src, fields, fields) }
+
+// ParseRange — то же, но полей от min до max (хвост необязательный).
+func ParseRange(src string, min, max int) ([][]string, error) {
 	var out [][]string
 	for i, line := range strings.Split(src, "\n") {
 		line = strings.TrimSuffix(line, "\r")
@@ -62,8 +67,11 @@ func Parse(src string, fields int) ([][]string, error) {
 			continue
 		}
 		parts := strings.Split(line, "\t")
-		if len(parts) != fields {
-			return nil, fmt.Errorf("строка %d: нужно полей %d, найдено %d", i+1, fields, len(parts))
+		if len(parts) < min || len(parts) > max {
+			if min == max {
+				return nil, fmt.Errorf("строка %d: нужно полей %d, найдено %d", i+1, min, len(parts))
+			}
+			return nil, fmt.Errorf("строка %d: нужно полей от %d до %d, найдено %d", i+1, min, max, len(parts))
 		}
 		for _, p := range parts {
 			if p == "" {

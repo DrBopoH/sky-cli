@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/DrBopoH/sky-cli/internal/apply"
@@ -25,11 +26,14 @@ func runCommit(a *App, env Env, args []string) error {
 	withNew := false
 	var rest []string
 	for _, x := range args {
-		if x == "--new" {
-			withNew = true
-		} else {
-			rest = append(rest, x)
+		if fl, ok := strings.CutPrefix(x, "--"); ok {
+			if !slices.Contains(ops.CommitFlags, fl) {
+				return fmt.Errorf("неизвестный флаг %s, допустимы: --%s", x, strings.Join(ops.CommitFlags, ", --"))
+			}
+			withNew = withNew || fl == "new"
+			continue
 		}
+		rest = append(rest, x)
 	}
 	if len(rest) != 1 {
 		return fmt.Errorf(`сообщение одним аргументом в кавычках: sky commit [--new] "тип: текст"`)

@@ -11,9 +11,6 @@ import (
 	"strings"
 )
 
-// legacyFiles — файлы прежней раскладки, которые sky при проверке удаляет.
-var legacyFiles = []string{"clouds/sky-reglament.md"}
-
 type Layout struct {
 	Root    string // корень git-репозитория
 	Dir     string // .sky/
@@ -49,22 +46,6 @@ func FindOrInit(cwd string) (l Layout, created bool, err error) {
 	}
 	l, err = Find(cwd)
 	return l, err == nil, err
-}
-
-// WriteIfAbsent создаёт файл, только если его нет; возвращает true, если создала.
-func WriteIfAbsent(path string, content []byte) (bool, error) {
-	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
-	if errors.Is(err, os.ErrExist) {
-		return false, nil
-	}
-	if err != nil {
-		return false, err
-	}
-	if _, err := f.Write(content); err != nil {
-		f.Close()
-		return false, err
-	}
-	return true, f.Close()
 }
 
 func At(root string) Layout {
@@ -145,15 +126,6 @@ func (l Layout) SyncReadme(files []Generated) ([]Change, error) {
 		}
 		out = append(out, Change{l.rel(p), Removed})
 	}
-	for _, name := range legacyFiles {
-		p := filepath.Join(l.Dir, filepath.FromSlash(name))
-		if _, err := os.Lstat(p); err == nil {
-			if err := os.Remove(p); err != nil {
-				return out, err
-			}
-			out = append(out, Change{l.rel(p), Removed})
-		}
-	}
 	return out, nil
 }
 
@@ -218,6 +190,11 @@ func (l Layout) EnsureIgnored(line string) (bool, error) {
 		s += "\n"
 	}
 	return true, os.WriteFile(p, []byte(s+line+"\n"), 0o644)
+}
+
+// CanCommit сообщает, знает ли git имя и почту автора для коммита в dir.
+func CanCommit(dir string) bool {
+	return exec.Command("git", "-C", dir, "var", "GIT_COMMITTER_IDENT").Run() == nil
 }
 
 // HasCommits сообщает, есть ли в репозитории хотя бы один коммит (HEAD указывает на существующий).

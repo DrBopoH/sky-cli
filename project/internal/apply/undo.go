@@ -30,6 +30,21 @@ func noteCommit(stageDir, full string) {
 	fmt.Fprintf(f, "%s%s\n", commitTag, full)
 }
 
+// noteCreated дописывает в manifest.txt файлы, которые коммит с флагом new подобрал в дереве: откат их удалит.
+func noteCreated(stageDir string, paths []string) {
+	if len(paths) == 0 {
+		return
+	}
+	f, err := os.OpenFile(filepath.Join(stageDir, "manifest.txt"), os.O_APPEND|os.O_WRONLY, 0o644)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	for _, p := range paths {
+		fmt.Fprintf(f, "%s\t%s\n", StCreated, p)
+	}
+}
+
 // NoteBackup дописывает в manifest.txt записи имя полного снимка «до».
 func NoteBackup(stageDir, name string) {
 	f, err := os.OpenFile(filepath.Join(stageDir, "manifest.txt"), os.O_APPEND|os.O_WRONLY, 0o644)

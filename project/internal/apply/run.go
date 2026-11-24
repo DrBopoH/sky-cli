@@ -51,8 +51,30 @@ func Run(root, stagesDir, patchPath string) (Result, error) {
 	}
 	if plan.Commit != "" {
 		paths := make([]string, len(changes))
+		have := map[string]bool{}
 		for i, c := range changes {
 			paths[i] = c.Path
+			have[c.Path] = true
+		}
+		if plan.New {
+			fresh, err := untracked(root)
+			if err != nil {
+				unstage(root, paths)
+				if rerr := Restore(root, stage); rerr != nil {
+					return Result{Stage: stage}, fmt.Errorf("%w; откат не завершён, снимок в %s: %v", err, stage, rerr)
+				}
+				return fail(err)
+			}
+			var extra []string
+			for _, p := range fresh {
+				if have[p] || GuardPath(p) != nil {
+					continue
+				}
+				extra = append(extra, p)
+				res.Lines = append(res.Lines, Line{"+", p})
+			}
+			noteCreated(stage, extra)
+			paths = append(paths, extra...)
 		}
 		hash, skipped, err := commitPaths(root, plan.Commit, paths)
 		for _, p := range skipped {

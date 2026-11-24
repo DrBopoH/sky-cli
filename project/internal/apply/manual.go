@@ -19,6 +19,11 @@ func gitBlob(root, p string) (data []byte, exe, ok bool) {
 	return data, exe, err == nil
 }
 
+// untracked — новые файлы дерева, не закрытые .gitignore.
+func untracked(root string) ([]string, error) {
+	return gitZ(root, "ls-files", "-z", "--others", "--exclude-standard")
+}
+
 func gitZ(root string, args ...string) ([]string, error) {
 	out, err := exec.Command("git", append([]string{"-C", root}, args...)...).Output()
 	if err != nil {
@@ -46,7 +51,7 @@ func RunManual(root, historyDir, msg string, withNew bool) (Result, error) {
 	}
 	paths := tracked
 	if withNew {
-		fresh, err := gitZ(root, "ls-files", "-z", "--others", "--exclude-standard")
+		fresh, err := untracked(root)
 		if err != nil {
 			return Result{}, err
 		}

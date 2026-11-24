@@ -56,17 +56,19 @@ func TestInitDefault(t *testing.T) {
 	if es, _ := os.ReadDir(l.Clouds); len(es) != 0 {
 		t.Fatalf("clouds/ должна быть пустой: %v", es)
 	}
-	if g, _ := os.ReadFile(filepath.Join(dir, ".gitignore")); !strings.Contains(string(g), ".sky/") || !strings.Contains(string(g), "*.db") {
-		t.Fatalf(".gitignore должен быть шаблоном с .sky/: %q", g)
+	if g, _ := os.ReadFile(filepath.Join(dir, ".gitignore")); string(g) != ".sky/\n" {
+		t.Fatalf(".gitignore: только строка .sky/: %q", g)
+	}
+	for _, f := range []string{"README.md", "LICENSE"} {
+		if _, err := os.Stat(filepath.Join(dir, f)); err == nil {
+			t.Errorf("init не создаёт %s", f)
+		}
 	}
 	if st, err := os.Stat(filepath.Join(dir, "project")); err != nil || !st.IsDir() {
 		t.Fatalf("папка project/ должна быть создана: %s", out)
 	}
 	if !strings.Contains(out, "✓ project/ создана") {
 		t.Fatalf("вывод: %s", out)
-	}
-	if b, err := os.ReadFile(filepath.Join(dir, "README.md")); err != nil || !strings.Contains(string(b), "- `project/`") {
-		t.Fatalf("README.md: %q %v", b, err)
 	}
 }
 
@@ -87,58 +89,21 @@ func TestInitScopeForms(t *testing.T) {
 	}
 }
 
-func TestInitIdempotentKeepsConf(t *testing.T) {
+func TestInitRunsOnce(t *testing.T) {
 	dir := gitDir(t)
 	run(New(), dir, "init", "backend/", "frontend/")
 	l := repo.At(dir)
-	custom := "scope = [backend/, frontend/]\ninbox = /tmp/in\nregulation = https://example.com/r.md\n"
+	custom := "scope = [backend/, frontend/]\ninbox = /tmp/in\n"
 	os.WriteFile(l.Conf, []byte(custom), 0o644)
-
-	code, out, _ := run(New(), dir, "init")
-	if code != 0 || !strings.Contains(out, "sky.conf не тронут") || !strings.Contains(out, "readme.md актуален") {
-		t.Fatalf("%d %s", code, out)
+	code, _, errs := run(New(), dir, "init")
+	if code != 1 || !strings.Contains(errs, "уже инициализирован") {
+		t.Fatalf("%d %s", code, errs)
+	}
+	if code, _, _ := run(New(), dir, "init", "app/"); code != 1 {
+		t.Error("с путями тоже отказ")
 	}
 	if b, _ := os.ReadFile(l.Conf); string(b) != custom {
 		t.Fatalf("конфиг изменён: %q", b)
-	}
-
-	run(New(), dir, "init", "app/")
-	b, _ := os.ReadFile(l.Conf)
-	c, _ := conf.Parse(string(b))
-	if len(c.Scope) != 1 || c.Scope[0] != "app/" || c.Inbox != "/tmp/in" || c.Regulation != "https://example.com/r.md" {
-		t.Fatalf("scope должен смениться, остальное остаться: %v", c)
-	}
-}
-
-func TestInitRestoresReadme(t *testing.T) {
-	dir := gitDir(t)
-	run(New(), dir, "init")
-	l := repo.At(dir)
-	p := filepath.Join(l.Readme, "readme.md")
-	orig, _ := os.ReadFile(p)
-	os.Chmod(p, 0o644)
-	os.WriteFile(p, []byte("чужая правка"), 0o644)
-	os.WriteFile(filepath.Join(l.Readme, "лишний.md"), []byte("x"), 0o644)
-	_, out, _ := run(New(), dir, "init")
-	if !strings.Contains(out, "перезаписан") || !strings.Contains(out, "удалён") {
-		t.Fatal(out)
-	}
-	if b, _ := os.ReadFile(p); string(b) != string(orig) {
-		t.Fatal("readme.md не восстановлен")
-	}
-}
-
-func TestInitMigratesLegacyReglament(t *testing.T) {
-	dir := gitDir(t)
-	l := repo.At(dir)
-	os.MkdirAll(l.Clouds, 0o755)
-	old := filepath.Join(l.Clouds, "sky-reglament.md")
-	os.WriteFile(old, []byte("старая записка"), 0o444)
-	if code, _, errs := run(New(), dir, "init"); code != 0 {
-		t.Fatal(errs)
-	}
-	if _, err := os.Stat(old); err == nil {
-		t.Fatal("старая записка в clouds/ должна быть удалена")
 	}
 }
 
@@ -158,8 +123,8 @@ func TestInitCreatesGitRepoOutsideGit(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(dir, ".sky", "sky.conf")); err != nil {
 		t.Error("нет .sky/sky.conf")
 	}
-	if code, out, _ := run(New(), dir, "init"); code != 0 || strings.Contains(out, "git init") {
-		t.Errorf("повторный init не должен создавать репозиторий: %s", out)
+	if code, out, _ := run(New(), dir, "init"); code != 1 || strings.Contains(out, "git init") {
+		t.Errorf("повторный init отказывает и ничего не создаёт: %s", out)
 	}
 }
 
@@ -172,6 +137,9 @@ func TestInitKeepsExistingFiles(t *testing.T) {
 	}
 	if b, _ := os.ReadFile(filepath.Join(dir, "README.md")); string(b) != "мой ридми" {
 		t.Errorf("README.md перезаписан: %q", b)
+	}
+	if files := git(t, dir, "show", "--name-only", "--format=", "HEAD"); strings.TrimSpace(files) != ".gitignore" {
+		t.Errorf("в первый коммит входит только .gitignore: %q", files)
 	}
 	if b, _ := os.ReadFile(filepath.Join(dir, ".gitignore")); string(b) != "bin\n.sky/\n" {
 		t.Errorf(".gitignore: %q", b)
@@ -193,30 +161,11 @@ func TestInitCreatesScopeDirs(t *testing.T) {
 	if code, _, errs := run(New(), dir2, "init", "./"); code != 0 {
 		t.Fatal(errs)
 	}
-	if b, _ := os.ReadFile(filepath.Join(dir2, "README.md")); !strings.Contains(string(b), "`./`") {
-		t.Errorf("README для корневого scope: %s", b)
-	}
 }
 
 func TestInitErrors(t *testing.T) {
 	if code, _, _ := run(New(), gitDir(t), "init", "../x"); code != 1 {
 		t.Fatal("scope вне репозитория должен падать")
-	}
-}
-
-func TestInitDropsCommandsOfRemovedScope(t *testing.T) {
-	dir := gitDir(t)
-	run(New(), dir, "init", "a/", "b/")
-	l := repo.At(dir)
-	os.WriteFile(l.Conf, []byte("scope = [a/, b/]\n\n[a/]\ntest = echo a\n\n[b/]\ntest = echo b\n"), 0o644)
-	_, out, _ := run(New(), dir, "init", "a/")
-	if !strings.Contains(out, "[b/]") {
-		t.Errorf("нужно предупреждение о [b/]: %s", out)
-	}
-	b, _ := os.ReadFile(l.Conf)
-	c, err := conf.Parse(string(b))
-	if err != nil || c.Cmd["a/"].Test != "echo a" || len(c.Cmd) != 1 {
-		t.Fatalf("команды: %v %v", c.Cmd, err)
 	}
 }
 
@@ -289,6 +238,20 @@ func git(t *testing.T, dir string, args ...string) string {
 	return strings.TrimSpace(string(out))
 }
 
+// initWithFiles — init и затем README.md и .gitignore (*.db), закоммиченные автором: init сам эти файлы не создаёт.
+func initWithFiles(t *testing.T, dir string) {
+	t.Helper()
+	if code, _, errs := run(New(), dir, "init"); code != 0 {
+		t.Fatal(errs)
+	}
+	os.WriteFile(filepath.Join(dir, "README.md"), []byte("# t\n"), 0o644)
+	f, _ := os.OpenFile(filepath.Join(dir, ".gitignore"), os.O_APPEND|os.O_WRONLY, 0o644)
+	f.WriteString("*.db\n")
+	f.Close()
+	git(t, dir, "add", "README.md", ".gitignore")
+	git(t, dir, "commit", "-q", "-m", "chore: files")
+}
+
 func TestInitFirstCommitAndDev(t *testing.T) {
 	dir := t.TempDir()
 	if code, out, errs := run(New(), dir, "init"); code != 0 {
@@ -309,7 +272,7 @@ func TestInitFirstCommitAndDev(t *testing.T) {
 	if m := git(t, dir, "log", "-1", "--format=%s", "main"); !strings.Contains(m, "At the moment") {
 		t.Errorf("сообщение: %q", m)
 	}
-	if f := git(t, dir, "ls-tree", "-r", "--name-only", "main"); f != ".gitignore\nREADME.md" {
+	if f := git(t, dir, "ls-tree", "-r", "--name-only", "main"); f != ".gitignore" {
 		t.Errorf("в коммите: %q", f)
 	}
 	if st := git(t, dir, "status", "--porcelain"); st != "" {
@@ -337,7 +300,7 @@ func TestInitHelp(t *testing.T) {
 		if code != 0 || errs != "" {
 			t.Fatalf("%v: %d %s", args, code, errs)
 		}
-		for _, want := range []string{"sky init — справка", "Задача Claude", "── Синтаксис", "sky init ./"} {
+		for _, want := range []string{"sky init — справка", "── Задача", "── Синтаксис", "sky init ./"} {
 			if !strings.Contains(out, want) {
 				t.Errorf("%v: нет %q", args, want)
 			}
@@ -373,69 +336,9 @@ func TestInitHelpIsNeutral(t *testing.T) {
 	}
 }
 
-func TestInitCreatesLicense(t *testing.T) {
-	dir := gitDir(t)
-	run(New(), dir, "init")
-	l := repo.At(dir)
-	b, _ := os.ReadFile(l.Conf)
-	os.WriteFile(l.Conf, append(b, []byte("\n[license]\ntype = MIT\nholder = Acme Ltd\nyear = 2030\n")...), 0o644)
-	code, out, errs := run(New(), dir, "init")
-	if code != 0 || !strings.Contains(out, "✓ LICENSE создан (MIT)") {
-		t.Fatalf("%d %s %s", code, out, errs)
-	}
-	lic, _ := os.ReadFile(filepath.Join(dir, "LICENSE"))
-	if !strings.Contains(string(lic), "Copyright (c) 2030 Acme Ltd") {
-		t.Errorf("LICENSE: %.80q", lic)
-	}
-	os.WriteFile(filepath.Join(dir, "LICENSE"), []byte("мой"), 0o644)
-	run(New(), dir, "init")
-	if b, _ := os.ReadFile(filepath.Join(dir, "LICENSE")); string(b) != "мой" {
-		t.Error("существующий LICENSE перезаписан")
-	}
-}
-
-func TestInitLicenseUrlCreatesNoFile(t *testing.T) {
-	dir := gitDir(t)
-	run(New(), dir, "init")
-	b, _ := os.ReadFile(repo.At(dir).Conf)
-	os.WriteFile(repo.At(dir).Conf, append(b, []byte("\n[license]\nurl = https://e.org/l\n")...), 0o644)
-	if code, _, errs := run(New(), dir, "init"); code != 0 {
-		t.Fatal(errs)
-	}
-	if _, err := os.Stat(filepath.Join(dir, "LICENSE")); err == nil {
-		t.Error("для url файл создаваться не должен")
-	}
-}
-
-func TestInitLicenseInFirstCommit(t *testing.T) {
-	dir := t.TempDir()
-	os.MkdirAll(filepath.Join(dir, ".sky"), 0o755)
-	exec.Command("git", "-C", dir, "init", "-q", "-b", "main").Run()
-	os.WriteFile(repo.At(dir).Conf, []byte("scope = [project/]\n\n[license]\ntype = Unlicense\n"), 0o644)
-	if code, _, errs := run(New(), dir, "init"); code != 0 {
-		t.Fatal(errs)
-	}
-	if f := git(t, dir, "ls-tree", "-r", "--name-only", "main"); f != ".gitignore\nLICENSE\nREADME.md" {
-		t.Errorf("в первом коммите: %q", f)
-	}
-	if r, _ := os.ReadFile(filepath.Join(dir, "README.md")); !strings.Contains(string(r), "Unlicense, см. [LICENSE]") {
-		t.Errorf("README: %s", r)
-	}
-}
-
-func TestInitBrokenLicenseStopsBeforeWriting(t *testing.T) {
-	dir := gitDir(t)
-	run(New(), dir, "init")
-	b, _ := os.ReadFile(repo.At(dir).Conf)
-	os.WriteFile(repo.At(dir).Conf, append(b, []byte("\n[license]\ntype = MIT\n")...), 0o644)
-	if code, _, errs := run(New(), dir, "init"); code != 1 || !strings.Contains(errs, "holder") {
-		t.Fatalf("%d %s", code, errs)
-	}
-}
-
 func TestCommitCommand(t *testing.T) {
 	dir := gitDir(t)
-	run(New(), dir, "init")
+	initWithFiles(t, dir)
 	os.WriteFile(filepath.Join(dir, "README.md"), []byte("правка\n"), 0o644)
 	os.WriteFile(filepath.Join(dir, "new.txt"), []byte("новый\n"), 0o644)
 	os.WriteFile(filepath.Join(dir, "ignored.db"), []byte("x"), 0o644)
@@ -457,7 +360,7 @@ func TestCommitCommand(t *testing.T) {
 
 func TestCommitCommandArgs(t *testing.T) {
 	dir := gitDir(t)
-	run(New(), dir, "init")
+	initWithFiles(t, dir)
 	os.WriteFile(filepath.Join(dir, "README.md"), []byte("правка\n"), 0o644)
 	for _, args := range [][]string{{"commit"}, {"commit", "feat:", "two"}, {"commit", "no type"}, {"commit", "feat: " + strings.Repeat("x", 73)}} {
 		if code, _, _ := run(New(), dir, args...); code != 1 {
@@ -478,7 +381,7 @@ func TestCommitNeedsInit(t *testing.T) {
 
 func TestCommitNewFlag(t *testing.T) {
 	dir := gitDir(t)
-	run(New(), dir, "init")
+	initWithFiles(t, dir)
 	os.WriteFile(filepath.Join(dir, "new.txt"), []byte("новый\n"), 0o644)
 	os.WriteFile(filepath.Join(dir, "x.db"), []byte("x"), 0o644) // в .gitignore из шаблона
 
@@ -575,7 +478,7 @@ func TestRollbackForce(t *testing.T) {
 
 func TestManualCommitIsRecord(t *testing.T) {
 	dir := gitDir(t)
-	run(New(), dir, "init")
+	initWithFiles(t, dir)
 	before := git(t, dir, "rev-parse", "HEAD")
 	readme := filepath.Join(dir, "README.md")
 	orig, _ := os.ReadFile(readme)
@@ -647,7 +550,7 @@ func TestRollbackEmpty(t *testing.T) {
 
 func TestLookCommand(t *testing.T) {
 	dir := gitDir(t)
-	run(New(), dir, "init")
+	initWithFiles(t, dir)
 	l := repo.At(dir)
 	if _, err := os.Stat(filepath.Join(l.Foryou, "status.md")); err != nil {
 		t.Fatal("init должен создавать foryou")
@@ -727,5 +630,36 @@ func TestApplyMakesBackupBeforePatch(t *testing.T) {
 	zs, _ := filepath.Glob(filepath.Join(repo.At(dir).Backups, "*-before-patch-1.zip"))
 	if len(zs) != 1 {
 		t.Fatalf("снимков: %v", zs)
+	}
+}
+
+func TestInitRefusesWithoutGitIdentity(t *testing.T) {
+	for _, k := range []string{"GIT_AUTHOR_NAME", "GIT_AUTHOR_EMAIL", "GIT_COMMITTER_NAME", "GIT_COMMITTER_EMAIL", "EMAIL"} {
+		t.Setenv(k, "")
+	}
+	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
+	t.Setenv("GIT_CONFIG_SYSTEM", os.DevNull)
+	t.Setenv("GIT_CONFIG_COUNT", "1")
+	t.Setenv("GIT_CONFIG_KEY_0", "user.useConfigOnly")
+	t.Setenv("GIT_CONFIG_VALUE_0", "true")
+	dir := t.TempDir()
+	code, _, errs := run(New(), dir, "init")
+	if code != 1 || !strings.Contains(errs, "имя и почту") {
+		t.Fatalf("%d %s", code, errs)
+	}
+	if _, err := os.Stat(filepath.Join(dir, ".git")); err == nil {
+		t.Error("до отказа ничего не создаётся")
+	}
+	if _, err := os.Stat(filepath.Join(dir, ".sky")); err == nil {
+		t.Error(".sky/ не должна появиться")
+	}
+}
+
+func TestCommitUnknownFlag(t *testing.T) {
+	dir := gitDir(t)
+	initWithFiles(t, dir)
+	os.WriteFile(filepath.Join(dir, "README.md"), []byte("правка\n"), 0o644)
+	if code, _, errs := run(New(), dir, "commit", "--all", "docs: x"); code != 1 || !strings.Contains(errs, "неизвестный флаг") {
+		t.Errorf("%d %s", code, errs)
 	}
 }

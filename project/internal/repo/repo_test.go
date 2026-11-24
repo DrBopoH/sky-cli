@@ -86,12 +86,10 @@ func TestSyncReadmeLifecycle(t *testing.T) {
 	}
 }
 
-func TestSyncReadmePrunesStrayAndLegacy(t *testing.T) {
+func TestSyncReadmePrunesStray(t *testing.T) {
 	l := newRepo(t)
 	os.WriteFile(filepath.Join(l.Readme, "stray.md"), []byte("x"), 0o644)
 	os.MkdirAll(filepath.Join(l.Readme, "dir"), 0o755)
-	legacy := filepath.Join(l.Clouds, "sky-reglament.md")
-	os.WriteFile(legacy, []byte("старое"), 0o444)
 	mine := filepath.Join(l.Clouds, "notes.md")
 	os.WriteFile(mine, []byte("мои заметки"), 0o644)
 
@@ -99,13 +97,10 @@ func TestSyncReadmePrunesStrayAndLegacy(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, p := range []string{".sky/readme/stray.md", ".sky/readme/dir", ".sky/clouds/sky-reglament.md"} {
+	for _, p := range []string{".sky/readme/stray.md", ".sky/readme/dir"} {
 		if status(t, ch, p) != Removed {
 			t.Errorf("%s должен быть удалён", p)
 		}
-	}
-	if _, err := os.Stat(legacy); err == nil {
-		t.Error("файл прежней раскладки остался")
 	}
 	if _, err := os.Stat(mine); err != nil {
 		t.Error("заметки в clouds/ трогать нельзя")

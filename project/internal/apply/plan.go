@@ -21,6 +21,7 @@ type Plan struct {
 	Effects []ops.Effect
 	Notes   []string
 	Commit  string // сообщение коммита; пусто — без коммита
+	New     bool   // флаг new операции commit
 }
 
 // Build читает архив, проверяет его и строит эффекты: сначала операции, потом файлы патча.
@@ -75,7 +76,7 @@ func Build(root, zipPath string) (Plan, error) {
 			continue
 		}
 		delete(opFiles, o.Name)
-		recs, err := ops.Parse(src, o.Fields)
+		recs, err := ops.ParseRange(src, o.Fields, o.Fields+o.Opt)
 		if err != nil {
 			return Plan{}, fmt.Errorf("операция %s: %w", o.Name, err)
 		}
@@ -89,6 +90,7 @@ func Build(root, zipPath string) (Plan, error) {
 					return Plan{}, fmt.Errorf("операция %s: в патче больше одной записи commit", o.Name)
 				}
 				plan.Commit = res.Commit
+				plan.New = res.New
 			}
 			plan.Effects = append(plan.Effects, res.Effects...)
 			plan.Notes = append(plan.Notes, res.Notes...)
