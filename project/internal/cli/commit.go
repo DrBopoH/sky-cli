@@ -2,7 +2,7 @@ package cli
 
 import (
 	"fmt"
-	"os/exec"
+	"github.com/DrBopoH/sky-cli/internal/gitx"
 	"path/filepath"
 	"strings"
 
@@ -57,20 +57,11 @@ func runCommit(a *App, env Env, args []string) error {
 	}
 	rel, _ := filepath.Rel(l.Root, res.Stage)
 	fmt.Fprintf(env.Out, "● запись %s\n", filepath.ToSlash(rel))
-	if un := gitOut(l.Root, "ls-files", "--others", "--exclude-standard"); un != "" {
+	if un := gitx.Try(l.Root, "ls-files", "--others", "--exclude-standard"); un != "" {
 		fmt.Fprintln(env.Out, "· новые файлы не включены в коммит (sky commit --new добавит их):")
 		for _, f := range strings.Split(un, "\n") {
 			fmt.Fprintf(env.Out, "  ? %s\n", f)
 		}
 	}
 	return nil
-}
-
-// gitOut — вывод git в корне репозитория; при ошибке пустая строка.
-func gitOut(root string, args ...string) string {
-	out, err := exec.Command("git", append([]string{"-C", root}, args...)...).Output()
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSpace(string(out))
 }

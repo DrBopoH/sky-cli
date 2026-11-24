@@ -5,9 +5,9 @@ import (
 	"archive/zip"
 	"bytes"
 	"fmt"
+	"github.com/DrBopoH/sky-cli/internal/gitx"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -113,14 +113,6 @@ func HumanSize(n int64) string {
 	return fmt.Sprintf("%d Б", n)
 }
 
-func headOf(root string) string {
-	out, err := exec.Command("git", "-C", root, "rev-parse", "--short=7", "HEAD").Output()
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSpace(string(out))
-}
-
 // sky-часть: файлы из .sky/, которых нет в git (папка в .gitignore).
 func skyFiles(root string, forChat bool) []string {
 	dirs := append([]string{}, sky...)
@@ -188,7 +180,7 @@ func Make(o Options) (Report, error) {
 		rep.Raw += int64(len(b))
 	}
 	rep.Files = len(items)
-	rep.Markdown = markdown(o, rep, headOf(o.Root))
+	rep.Markdown = markdown(o, rep, gitx.Head(o.Root))
 
 	// up — транзит для чата: один файл на проект, перезаписывается, в историю не попадает
 	name := safe.Replace(filepath.Base(o.Root)) + "-up"

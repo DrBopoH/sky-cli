@@ -3,9 +3,9 @@ package apply
 import (
 	"archive/zip"
 	"fmt"
+	"github.com/DrBopoH/sky-cli/internal/gitx"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -170,10 +170,6 @@ func inverse(e Entry) ([]ops.Effect, error) {
 	return out, nil
 }
 
-func gitOK(root string, args ...string) bool {
-	return exec.Command("git", append([]string{"-C", root}, args...)...).Run() == nil
-}
-
 // Commits возвращает хэши коммитов записей (пустые пропускаются).
 func Commits(es []Entry) []string {
 	var out []string
@@ -290,7 +286,7 @@ func Undo(root, historyDir string, n int) (Result, []Entry, error) {
 		return Result{}, es, err
 	}
 	if k > 0 {
-		if _, err := git(root, "reset", "-q", "--mixed", fmt.Sprintf("HEAD~%d", k)); err != nil {
+		if _, err := gitx.Run(root, "reset", "-q", "--mixed", fmt.Sprintf("HEAD~%d", k)); err != nil {
 			if rerr := Restore(root, res.Stage); rerr != nil {
 				return Result{Stage: res.Stage}, es, fmt.Errorf("%w; откат не завершён, снимок в %s: %v", err, res.Stage, rerr)
 			}
@@ -308,17 +304,17 @@ func Undo(root, historyDir string, n int) (Result, []Entry, error) {
 func topCommits(root string, es []Entry) (int, error) {
 	k := 0
 	for _, e := range es {
-		if e.Commit == "" || !gitOK(root, "merge-base", "--is-ancestor", e.Commit, "HEAD") {
+		if e.Commit == "" || !gitx.OK(root, "merge-base", "--is-ancestor", e.Commit, "HEAD") {
 			continue
 		}
-		top, err := git(root, "rev-parse", fmt.Sprintf("HEAD~%d", k))
+		top, err := gitx.Run(root, "rev-parse", fmt.Sprintf("HEAD~%d", k))
 		if err != nil || top != e.Commit {
 			return 0, fmt.Errorf("запись %s создала коммит %.7s, но он не лежит подряд на вершине ветки: откат вручную (git)", e.Name, e.Commit)
 		}
 		k++
 	}
 	if k > 0 {
-		if _, err := git(root, "rev-parse", "--verify", "-q", fmt.Sprintf("HEAD~%d", k)); err != nil {
+		if _, err := gitx.Run(root, "rev-parse", "--verify", "-q", fmt.Sprintf("HEAD~%d", k)); err != nil {
 			return 0, fmt.Errorf("снимаемые коммиты доходят до корня истории: откат с их снятием не поддерживается")
 		}
 	}
@@ -339,7 +335,7 @@ func UndoKeep(root, historyDir string, n int) (int, []Entry, error) {
 	if k == 0 {
 		return 0, es, fmt.Errorf("в последних записях (%d) нет коммитов, которые можно снять", len(es))
 	}
-	if _, err := git(root, "reset", "-q", "--mixed", fmt.Sprintf("HEAD~%d", k)); err != nil {
+	if _, err := gitx.Run(root, "reset", "-q", "--mixed", fmt.Sprintf("HEAD~%d", k)); err != nil {
 		return 0, es, err
 	}
 	for _, e := range es {

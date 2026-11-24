@@ -3,8 +3,8 @@ package look
 
 import (
 	"fmt"
+	"github.com/DrBopoH/sky-cli/internal/gitx"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -34,14 +34,6 @@ type Input struct {
 	Patches []string // имена patch*.zip в inbox
 }
 
-func git(root string, args ...string) string {
-	out, err := exec.Command("git", append([]string{"-C", root}, args...)...).Output()
-	if err != nil {
-		return ""
-	}
-	return strings.TrimRight(string(out), "\n")
-}
-
 var userinfo = regexp.MustCompile(`(://)[^/@\s]+@`)
 
 func lines(s string) []string {
@@ -53,7 +45,7 @@ func lines(s string) []string {
 
 // Build собирает все файлы foryou.
 func Build(in Input) []File {
-	head := git(in.Root, "rev-parse", "--short=7", "HEAD")
+	head := gitx.Try(in.Root, "rev-parse", "--short=7", "HEAD")
 	snap := "Снимок при HEAD " + head + "."
 	if head == "" {
 		snap = "Снимок: коммитов ещё нет."
@@ -83,18 +75,18 @@ func orNone(ss []string, f func(string) string) string {
 func status(in Input, head, snap string) string {
 	var b strings.Builder
 	b.WriteString("Состояние рабочего дерева: ветка, HEAD, незакоммиченное, remote, патчи в inbox, последняя запись history. Читай первым.\n" + snap + "\n\n")
-	branch := git(in.Root, "branch", "--show-current")
+	branch := gitx.Try(in.Root, "branch", "--show-current")
 	if branch == "" {
 		branch = "(нет текущей ветки)"
 	}
 	fmt.Fprintf(&b, "ветка: %s\n", branch)
 	if head != "" {
-		fmt.Fprintf(&b, "HEAD: %s %s\n", head, git(in.Root, "log", "-1", "--format=%s"))
+		fmt.Fprintf(&b, "HEAD: %s %s\n", head, gitx.Try(in.Root, "log", "-1", "--format=%s"))
 	} else {
 		b.WriteString("HEAD: коммитов нет\n")
 	}
 	var remotes []string
-	for _, r := range lines(git(in.Root, "remote", "-v")) {
+	for _, r := range lines(gitx.Try(in.Root, "remote", "-v")) {
 		if strings.HasSuffix(r, "(fetch)") {
 			remotes = append(remotes, userinfo.ReplaceAllString(strings.TrimSuffix(r, " (fetch)"), "$1"))
 		}
@@ -107,12 +99,12 @@ func status(in Input, head, snap string) string {
 	fmt.Fprintf(&b, "scope: %s\n\n", strings.Join(in.Conf.Scope, ", "))
 
 	var tracked []string
-	for _, l := range lines(git(in.Root, "status", "--porcelain", "--untracked-files=no")) {
+	for _, l := range lines(gitx.Try(in.Root, "status", "--porcelain", "--untracked-files=no")) {
 		tracked = append(tracked, l)
 	}
 	b.WriteString("изменено (отслеживаемые файлы):\n" + orNone(tracked, func(s string) string { return s }))
 	var fresh []string
-	for _, f := range lines(git(in.Root, "ls-files", "--others", "--exclude-standard")) {
+	for _, f := range lines(gitx.Try(in.Root, "ls-files", "--others", "--exclude-standard")) {
 		fresh = append(fresh, f)
 	}
 	b.WriteString("новые (не в git, не игнорируются):\n" + orNone(fresh, func(s string) string { return "? " + s }))
@@ -139,9 +131,9 @@ func status(in Input, head, snap string) string {
 func branches(in Input, snap string) string {
 	var b strings.Builder
 	b.WriteString("Ветки репозитория: локальные и удалённые, вершина и тема последнего коммита. Читай, когда нужно знать, какие ветки есть.\n" + snap + "\n\n")
-	cur := git(in.Root, "branch", "--show-current")
+	cur := gitx.Try(in.Root, "branch", "--show-current")
 	section := func(title, ref string) {
-		rows := lines(git(in.Root, "for-each-ref", "--format=%(refname:short)\t%(objectname:short=7)\t%(contents:subject)", ref))
+		rows := lines(gitx.Try(in.Root, "for-each-ref", "--format=%(refname:short)\t%(objectname:short=7)\t%(contents:subject)", ref))
 		b.WriteString(title + "\n")
 		if len(rows) == 0 {
 			b.WriteString("  нет\n")
@@ -165,7 +157,7 @@ func branches(in Input, snap string) string {
 func history(in Input, snap string) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "История коммитов: до %d последних на каждую ветку, новые сверху, формат «хэш тема». Читай, когда нужна история.\n%s\n", MaxBranchCommits, snap)
-	refs := lines(git(in.Root, "for-each-ref", "--format=%(refname)", "refs/heads", "refs/remotes"))
+	refs := lines(gitx.Try(in.Root, "for-each-ref", "--format=%(refname)", "refs/heads", "refs/remotes"))
 	if len(refs) == 0 {
 		b.WriteString("\nкоммитов нет\n")
 		return b.String()
@@ -175,9 +167,9 @@ func history(in Input, snap string) string {
 		if strings.HasSuffix(r, "/HEAD") {
 			continue
 		}
-		total := git(in.Root, "rev-list", "--count", r)
+		total := gitx.Try(in.Root, "rev-list", "--count", r)
 		fmt.Fprintf(&b, "\n## %s (всего %s)\n", short, total)
-		for _, l := range lines(git(in.Root, "log", "-n", fmt.Sprint(MaxBranchCommits), "--format=%h %s", r)) {
+		for _, l := range lines(gitx.Try(in.Root, "log", "-n", fmt.Sprint(MaxBranchCommits), "--format=%h %s", r)) {
 			b.WriteString(l + "\n")
 		}
 	}
@@ -186,15 +178,12 @@ func history(in Input, snap string) string {
 
 // Paths — файлы репозитория по версии git: отслеживаемые и новые без игнорируемых; удалённые с диска пропускаются.
 func Paths(root string) []string {
-	out, err := exec.Command("git", "-C", root, "ls-files", "-z", "--cached", "--others", "--exclude-standard", "--deduplicate").Output()
+	all, err := gitx.Visible(root)
 	if err != nil {
 		return nil
 	}
 	var ps []string
-	for _, p := range strings.Split(string(out), "\x00") {
-		if p == "" {
-			continue
-		}
+	for _, p := range all {
 		if _, err := os.Lstat(filepath.Join(root, p)); err != nil {
 			continue // удалён с диска, но ещё в индексе
 		}
@@ -248,13 +237,13 @@ func tree(in Input, snap string) string {
 func graph(in Input, snap string) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "Дерево веток: граф коммитов всех веток с указателями (HEAD, ветки, remote, теги), новые сверху; не больше %d строк. Читай, когда нужно понять, как ветки расходятся и сливаются.\n%s\n\n", MaxTreeLines, snap)
-	g := git(in.Root, "log", "--graph", "--all", "--date-order", "--decorate=short", "--format=%h%d %s", "-n", fmt.Sprint(MaxTreeLines))
+	g := gitx.Try(in.Root, "log", "--graph", "--all", "--date-order", "--decorate=short", "--format=%h%d %s", "-n", fmt.Sprint(MaxTreeLines))
 	if g == "" {
 		b.WriteString("коммитов нет\n")
 		return b.String()
 	}
 	rows := lines(g)
-	total := lines(git(in.Root, "rev-list", "--all", "--count"))
+	total := lines(gitx.Try(in.Root, "rev-list", "--all", "--count"))
 	capped(&b, rows)
 	if len(total) == 1 && total[0] != "" {
 		var n int

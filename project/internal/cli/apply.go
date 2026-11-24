@@ -2,11 +2,10 @@ package cli
 
 import (
 	"fmt"
+	"github.com/DrBopoH/sky-cli/internal/gitx"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
-	"strings"
 
 	"github.com/DrBopoH/sky-cli/internal/apply"
 	"github.com/DrBopoH/sky-cli/internal/conf"
@@ -52,7 +51,7 @@ func runApply(a *App, env Env, args []string) error {
 		return fmt.Errorf("в %s нет patch*.zip", inbox)
 	}
 	if !force {
-		if dirty := dirtyFiles(l.Root); dirty != "" {
+		if dirty := gitx.Dirty(l.Root); dirty != "" {
 			return fmt.Errorf("в отслеживаемых файлах есть незакоммиченные правки; закоммить их или sky apply --force:\n%s", dirty)
 		}
 	}
@@ -117,12 +116,4 @@ func listPatches(inbox string) ([]string, error) {
 		out[i] = it.path
 	}
 	return out, nil
-}
-
-func dirtyFiles(root string) string {
-	out, err := exec.Command("git", "-C", root, "status", "--porcelain", "--untracked-files=no").Output()
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSpace(string(out))
 }

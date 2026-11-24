@@ -3,6 +3,7 @@ package apply
 import (
 	"errors"
 	"fmt"
+	"github.com/DrBopoH/sky-cli/internal/gitx"
 	"io"
 	"os"
 	"path/filepath"
@@ -57,9 +58,9 @@ func Run(root, stagesDir, patchPath string) (Result, error) {
 			have[c.Path] = true
 		}
 		if plan.CommitOpts.New {
-			fresh, err := untracked(root)
+			fresh, err := gitx.Untracked(root)
 			if err != nil {
-				unstage(root, paths)
+				gitx.Unstage(root, paths)
 				if rerr := Restore(root, stage); rerr != nil {
 					return Result{Stage: stage}, fmt.Errorf("%w; откат не завершён, снимок в %s: %v", err, stage, rerr)
 				}
@@ -81,7 +82,7 @@ func Run(root, stagesDir, patchPath string) (Result, error) {
 			res.Notes = append(res.Notes, p+": в .gitignore, в коммит не включён")
 		}
 		if err != nil {
-			unstage(root, paths)
+			gitx.Unstage(root, paths)
 			if rerr := Restore(root, stage); rerr != nil {
 				return Result{Stage: stage}, fmt.Errorf("%w; откат не завершён, снимок в %s: %v", err, stage, rerr)
 			}
@@ -90,7 +91,7 @@ func Run(root, stagesDir, patchPath string) (Result, error) {
 		switch {
 		case hash != "":
 			res.Commit = hash + " " + plan.Commit
-			if full, err := git(root, "rev-parse", "HEAD"); err == nil {
+			if full, err := gitx.Run(root, "rev-parse", "HEAD"); err == nil {
 				noteCommit(stage, full)
 			}
 		case len(paths) == 0:

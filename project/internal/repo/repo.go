@@ -5,8 +5,8 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"github.com/DrBopoH/sky-cli/internal/gitx"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 )
@@ -24,11 +24,11 @@ type Layout struct {
 }
 
 func Find(cwd string) (Layout, error) {
-	out, err := exec.Command("git", "-C", cwd, "rev-parse", "--show-toplevel").Output()
+	top, err := gitx.Toplevel(cwd)
 	if err != nil {
-		return Layout{}, errors.New("это не git-репозиторий")
+		return Layout{}, err
 	}
-	return At(strings.TrimSpace(string(out))), nil
+	return At(top), nil
 }
 
 // FindOrInit находит репозиторий; если cwd не внутри git, создаёт его (git init, ветка main). created — создан ли.
@@ -36,13 +36,8 @@ func FindOrInit(cwd string) (l Layout, created bool, err error) {
 	if l, err = Find(cwd); err == nil {
 		return l, false, nil
 	}
-	if out, e := exec.Command("git", "-C", cwd, "init", "-q", "-b", "main").CombinedOutput(); e != nil {
-		if out2, e2 := exec.Command("git", "-C", cwd, "init", "-q").CombinedOutput(); e2 != nil {
-			return Layout{}, false, fmt.Errorf("git init не удался: %s%s", out, out2)
-		}
-		if out, e := exec.Command("git", "-C", cwd, "symbolic-ref", "HEAD", "refs/heads/main").CombinedOutput(); e != nil {
-			return Layout{}, false, fmt.Errorf("не выбрать ветку main: %s", out)
-		}
+	if err = gitx.Init(cwd); err != nil {
+		return Layout{}, false, err
 	}
 	l, err = Find(cwd)
 	return l, err == nil, err
@@ -194,23 +189,20 @@ func (l Layout) EnsureIgnored(line string) (bool, error) {
 
 // CanCommit сообщает, знает ли git имя и почту автора для коммита в dir.
 func CanCommit(dir string) bool {
-	return exec.Command("git", "-C", dir, "var", "GIT_COMMITTER_IDENT").Run() == nil
+	return gitx.CanCommit(dir)
 }
 
 // HasCommits сообщает, есть ли в репозитории хотя бы один коммит (HEAD указывает на существующий).
 func (l Layout) HasCommits() bool {
-	return exec.Command("git", "-C", l.Root, "rev-parse", "--verify", "-q", "HEAD").Run() == nil
+	return gitx.HasCommits(l.Root)
 }
 
 // FirstCommit создаёт первый коммит из перечисленных файлов (если файлов нет — пустой), затем ветку dev от него
 // и переключается на неё. Вызывать только в репозитории без коммитов.
 func (l Layout) FirstCommit(msg string, files []string) error {
 	run := func(args ...string) error {
-		out, err := exec.Command("git", append([]string{"-C", l.Root}, args...)...).CombinedOutput()
-		if err != nil {
-			return fmt.Errorf("git %s: %v: %s", args[0], err, strings.TrimSpace(string(out)))
-		}
-		return nil
+		_, err := gitx.Run(l.Root, args...)
+		return err
 	}
 	if len(files) > 0 {
 		if err := run(append([]string{"add", "--"}, files...)...); err != nil {
