@@ -1,4 +1,4 @@
-package apply
+package apply_test
 
 import (
 	"archive/zip"
@@ -7,6 +7,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/DrBopoH/sky-cli/internal/apply"
+	"github.com/DrBopoH/sky-cli/internal/ops"
 )
 
 type entry struct {
@@ -67,7 +70,13 @@ func (e env) patch(t *testing.T, name string, entries ...entry) string {
 	return p
 }
 
-func (e env) run(p string) (Result, error) { return Run(e.root, e.stages, p) }
+func (e env) run(p string) (apply.Result, error) {
+	plan, err := ops.Build(e.root, p)
+	if err != nil {
+		return apply.Result{}, err
+	}
+	return apply.Run(e.root, e.stages, p, plan)
+}
 
 // snapshotTree возвращает путь→содержимое всех файлов репозитория, кроме .sky/stages.
 func (e env) snapshotTree(t *testing.T) map[string]string {
@@ -158,7 +167,7 @@ func TestRestoreReturnsBefore(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := Restore(e.root, res.Stage); err != nil {
+	if err := apply.Restore(e.root, res.Stage); err != nil {
 		t.Fatal(err)
 	}
 	after := e.snapshotTree(t)
@@ -319,12 +328,12 @@ func TestStageNumbering(t *testing.T) {
 
 func TestGuardPath(t *testing.T) {
 	for _, ok := range []string{"a.txt", "dir/sub/f.go", ".github/ci.yml", ".sky/clouds/n.md", ".sky/clouds/d/n.md", "имя с пробелом.txt", ".gitignore", ".env.example"} {
-		if err := GuardPath(ok); err != nil {
+		if err := apply.GuardPath(ok); err != nil {
 			t.Errorf("%q должен проходить: %v", ok, err)
 		}
 	}
 	for _, bad := range []string{"", "/a", "../a", "a/../b", "./a", "a//b", ".git/x", ".sky", ".sky/clouds", ".sky/sky.conf", "x.sqlite-wal", "id.key", ".env"} {
-		if GuardPath(bad) == nil {
+		if apply.GuardPath(bad) == nil {
 			t.Errorf("%q должен отклоняться", bad)
 		}
 	}

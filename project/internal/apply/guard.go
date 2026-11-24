@@ -80,16 +80,3 @@ func resolve(root, rel string) (string, error) {
 	}
 	return abs, nil
 }
-
-// world — вид репозитория для операций.
-type world struct{ root string }
-
-func (w world) Guard(p string) error { return GuardPath(p) }
-
-func (w world) Stat(p string) (bool, bool) {
-	fi, err := os.Lstat(filepath.Join(w.root, filepath.FromSlash(p)))
-	if err != nil {
-		return false, false
-	}
-	return true, fi.IsDir()
-}

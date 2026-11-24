@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	"github.com/DrBopoH/sky-cli/internal/gitx"
-	"github.com/DrBopoH/sky-cli/internal/ops"
+	"github.com/DrBopoH/sky-cli/internal/notation"
 )
 
 const (
@@ -124,12 +124,12 @@ func Entries(stagesDir string) ([]Entry, error) {
 }
 
 // inverse строит эффекты, обратные записи: созданное удаляется, изменённое и удалённое возвращается из before.zip.
-func inverse(e Entry) ([]ops.Effect, error) {
+func inverse(e Entry) ([]Effect, error) {
 	man, err := os.ReadFile(filepath.Join(e.Dir, "manifest.txt"))
 	if err != nil {
 		return nil, err
 	}
-	recs, err := ops.Parse(string(man), 2)
+	recs, err := notation.Parse(string(man), 2)
 	if err != nil {
 		return nil, err
 	}
@@ -142,14 +142,14 @@ func inverse(e Entry) ([]ops.Effect, error) {
 	for _, f := range zr.File {
 		old[f.Name] = f
 	}
-	var out []ops.Effect
+	var out []Effect
 	for _, r := range recs {
 		status, p := r[0], r[1]
 		if err := GuardPath(p); err != nil {
 			return nil, err
 		}
 		if status == StCreated {
-			out = append(out, ops.Effect{Kind: ops.Delete, Path: p})
+			out = append(out, Effect{Kind: Delete, Path: p})
 			continue
 		}
 		f, ok := old[p]
@@ -165,7 +165,7 @@ func inverse(e Entry) ([]ops.Effect, error) {
 		if err != nil {
 			return nil, err
 		}
-		out = append(out, ops.Effect{Kind: ops.Write, Path: p, Content: b, Exec: f.Mode()&0o111 != 0})
+		out = append(out, Effect{Kind: Write, Path: p, Content: b, Exec: f.Mode()&0o111 != 0})
 	}
 	return out, nil
 }
@@ -182,8 +182,8 @@ func Commits(es []Entry) []string {
 }
 
 // RunEffects применяет эффекты как новую запись history/ (с «до» затронутых файлов), при ошибке откатывает.
-func RunEffects(root, historyDir, dirName, source string, effects []ops.Effect) (Result, error) {
-	if err := checkEffects(root, effects); err != nil {
+func RunEffects(root, historyDir, dirName, source string, effects []Effect) (Result, error) {
+	if err := CheckEffects(root, effects); err != nil {
 		return Result{}, err
 	}
 	changes, same, err := classify(root, effects)
@@ -240,7 +240,7 @@ func Undo(root, historyDir string, n int) (Result, []Entry, error) {
 	if err != nil {
 		return Result{}, es, err
 	}
-	merged := map[string]ops.Effect{}
+	merged := map[string]Effect{}
 	for _, e := range es { // от новых к старым: побеждает самая старая запись
 		eff, err := inverse(e)
 		if err != nil {
@@ -255,7 +255,7 @@ func Undo(root, historyDir string, n int) (Result, []Entry, error) {
 		paths = append(paths, p)
 	}
 	sort.Strings(paths)
-	effects := make([]ops.Effect, len(paths))
+	effects := make([]Effect, len(paths))
 	for i, p := range paths {
 		effects[i] = merged[p]
 	}

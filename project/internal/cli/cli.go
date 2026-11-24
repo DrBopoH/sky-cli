@@ -6,6 +6,7 @@ import (
 	"io"
 	"strings"
 
+	"github.com/DrBopoH/sky-cli/internal/apply"
 	"github.com/DrBopoH/sky-cli/internal/conf"
 	"github.com/DrBopoH/sky-cli/internal/ops"
 	"github.com/DrBopoH/sky-cli/internal/readme"
@@ -30,10 +31,14 @@ type Command struct {
 
 type App struct {
 	Commands []Command
+	Plan     apply.Planner // как читать патч; подставляет точка входа, ядро адаптера не знает
 }
 
 func New() *App {
-	return &App{Commands: []Command{initCommand(), applyCommand(), commitCommand(), rollbackCommand(), lookCommand(), upCommand()}}
+	return &App{
+		Commands: []Command{initCommand(), applyCommand(), commitCommand(), rollbackCommand(), lookCommand(), upCommand()},
+		Plan:     ops.Build,
+	}
 }
 
 // Entries — команды для readme.md: реестр плюс встроенные help и version.

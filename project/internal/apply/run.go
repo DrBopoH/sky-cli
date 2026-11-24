@@ -24,13 +24,9 @@ type Result struct {
 	Left []string
 }
 
-// Run применяет один патч. Проверка и план строятся до любой записи; ошибка при записи откатывает уже сделанное.
+// Run применяет план одного патча. Проверка и план строятся до любой записи; ошибка при записи откатывает уже сделанное.
 // Применённый патч переносится в запись history/; при ошибке остаётся там, где лежал.
-func Run(root, stagesDir, patchPath string) (Result, error) {
-	plan, err := Build(root, patchPath)
-	if err != nil {
-		return Result{}, err
-	}
+func Run(root, stagesDir, patchPath string, plan Plan) (Result, error) {
 	changes, same, err := classify(root, plan.Effects)
 	if err != nil {
 		return Result{}, err

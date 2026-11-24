@@ -1,9 +1,9 @@
 package ops
 
 import (
-	"reflect"
-	"strings"
 	"testing"
+
+	"github.com/DrBopoH/sky-cli/internal/apply"
 )
 
 type fakeWorld struct {
@@ -25,25 +25,6 @@ func (badErr) Error() string { return "запрещённый путь" }
 
 var errBad = badErr{}
 
-func TestParse(t *testing.T) {
-	got, err := Parse("# c\n\na b/c.txt\r\n\nx\n", 1)
-	if err != nil || !reflect.DeepEqual(got, [][]string{{"a b/c.txt"}, {"x"}}) {
-		t.Fatalf("%v %v", got, err)
-	}
-	got, err = Parse("a\tb\n", 2)
-	if err != nil || !reflect.DeepEqual(got, [][]string{{"a", "b"}}) {
-		t.Fatalf("%v %v", got, err)
-	}
-	for _, bad := range []string{"a\tb\n", "\ta\n"} {
-		if _, err := Parse(bad, 1); err == nil {
-			t.Errorf("%q: ждали ошибку", bad)
-		}
-	}
-	if _, err := Parse("a\n", 2); err == nil || !strings.Contains(err.Error(), "строка 1") {
-		t.Errorf("номер строки в ошибке: %v", err)
-	}
-}
-
 func TestDeletePlan(t *testing.T) {
 	op, ok := lookup("delete")
 	if !ok || op.Fields != 1 || op.Doc == "" {
@@ -51,7 +32,7 @@ func TestDeletePlan(t *testing.T) {
 	}
 	w := fakeWorld{files: map[string]bool{"a.txt": false, "dir": true}, bad: "secret.db"}
 	r, err := op.Plan([]string{"a.txt"}, w)
-	if err != nil || len(r.Effects) != 1 || r.Effects[0].Kind != Delete || r.Effects[0].Path != "a.txt" {
+	if err != nil || len(r.Effects) != 1 || r.Effects[0].Kind != apply.Delete || r.Effects[0].Path != "a.txt" {
 		t.Fatalf("%v %v", r, err)
 	}
 	r, err = op.Plan([]string{"gone.txt"}, w)

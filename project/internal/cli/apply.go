@@ -56,7 +56,7 @@ func runApply(a *App, env Env, args []string) error {
 	for _, p := range patches {
 		name := filepath.Base(p)
 		fmt.Fprintf(env.Out, "── %s\n", name)
-		res, err := work.ApplyPatch(l, p)
+		res, err := work.ApplyPatch(l, p, a.Plan)
 		if err != nil {
 			return err
 		}

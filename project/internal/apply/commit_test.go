@@ -1,4 +1,4 @@
-package apply
+package apply_test
 
 import (
 	"os"
@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/DrBopoH/sky-cli/internal/apply"
 )
 
 func gitEnv(t *testing.T) env {
@@ -241,7 +243,7 @@ func TestCommitOpNewFlagTakesUntracked(t *testing.T) {
 		t.Errorf("в коммите: %s", files)
 	}
 	// откат удаляет подобранный файл
-	if _, _, err := Undo(e.root, e.stages, 1); err != nil {
+	if _, _, err := apply.Undo(e.root, e.stages, 1); err != nil {
 		t.Fatal(err)
 	}
 	if _, ok := e.read("stray.txt"); ok {

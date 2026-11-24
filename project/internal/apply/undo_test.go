@@ -1,8 +1,10 @@
-package apply
+package apply_test
 
 import (
 	"strings"
 	"testing"
+
+	"github.com/DrBopoH/sky-cli/internal/apply"
 )
 
 func TestUndoRestoresFiles(t *testing.T) {
@@ -17,8 +19,8 @@ func TestUndoRestoresFiles(t *testing.T) {
 	if _, err := e.run(p); err != nil {
 		t.Fatal(err)
 	}
-	res, es, err := Undo(e.root, e.stages, 1)
-	var target Entry
+	res, es, err := apply.Undo(e.root, e.stages, 1)
+	var target apply.Entry
 	if len(es) > 0 {
 		target = es[0]
 	}
@@ -52,10 +54,10 @@ func TestUndoTwiceRedoes(t *testing.T) {
 	if _, err := e.run(e.patch(t, "patch-a.zip", entry{name: "a.txt", body: "новый\n"}, entry{name: "n.txt", body: "n\n"})); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := Undo(e.root, e.stages, 1); err != nil {
+	if _, _, err := apply.Undo(e.root, e.stages, 1); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := Undo(e.root, e.stages, 1); err != nil {
+	if _, _, err := apply.Undo(e.root, e.stages, 1); err != nil {
 		t.Fatal(err)
 	}
 	if b, _ := e.read("a.txt"); b != "новый\n" {
@@ -64,7 +66,7 @@ func TestUndoTwiceRedoes(t *testing.T) {
 	if _, ok := e.read("n.txt"); !ok {
 		t.Error("n.txt должен вернуться")
 	}
-	list, _ := Entries(e.stages)
+	list, _ := apply.Entries(e.stages)
 	if len(list) != 3 {
 		t.Errorf("записей: %d", len(list))
 	}
@@ -75,8 +77,8 @@ func TestUndoKeepsManualEditsInRedo(t *testing.T) {
 	e.write(t, "a.txt", "старый\n")
 	e.run(e.patch(t, "patch-a.zip", entry{name: "a.txt", body: "новый\n"}))
 	e.write(t, "a.txt", "правка руками\n")
-	Undo(e.root, e.stages, 1)
-	Undo(e.root, e.stages, 1)
+	apply.Undo(e.root, e.stages, 1)
+	apply.Undo(e.root, e.stages, 1)
 	if b, _ := e.read("a.txt"); b != "правка руками\n" {
 		t.Errorf("ручная правка потеряна: %q", b)
 	}
@@ -84,7 +86,7 @@ func TestUndoKeepsManualEditsInRedo(t *testing.T) {
 
 func TestUndoNoEntries(t *testing.T) {
 	e := newEnv(t)
-	if _, _, err := Undo(e.root, e.stages, 1); err == nil || !strings.Contains(err.Error(), "нет записей") {
+	if _, _, err := apply.Undo(e.root, e.stages, 1); err == nil || !strings.Contains(err.Error(), "нет записей") {
 		t.Errorf("%v", err)
 	}
 }
@@ -100,7 +102,7 @@ func TestUndoRemovesCommit(t *testing.T) {
 	if _, err := e.run(p); err != nil {
 		t.Fatal(err)
 	}
-	res, _, err := Undo(e.root, e.stages, 1)
+	res, _, err := apply.Undo(e.root, e.stages, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -114,7 +116,7 @@ func TestUndoRemovesCommit(t *testing.T) {
 		t.Errorf("пометки: %v", res.Notes)
 	}
 	// откат отката: файлы возвращаются, коммит нет
-	if _, _, err := Undo(e.root, e.stages, 1); err != nil {
+	if _, _, err := apply.Undo(e.root, e.stages, 1); err != nil {
 		t.Fatal(err)
 	}
 	if b, _ := e.read("base.txt"); b != "изменён\n" {
@@ -135,13 +137,13 @@ func TestUndoRefusesWhenCommitIsNotHead(t *testing.T) {
 	g(t, e.root, "add", "y.txt")
 	g(t, e.root, "commit", "-q", "-m", "chore: later")
 	head := g(t, e.root, "rev-parse", "HEAD")
-	if _, _, err := Undo(e.root, e.stages, 1); err == nil || !strings.Contains(err.Error(), "вершине ветки") {
+	if _, _, err := apply.Undo(e.root, e.stages, 1); err == nil || !strings.Contains(err.Error(), "вершине ветки") {
 		t.Fatalf("ждали отказ: %v", err)
 	}
 	if _, ok := e.read("x.txt"); !ok || g(t, e.root, "rev-parse", "HEAD") != head {
 		t.Error("при отказе ничего не меняется")
 	}
-	if list, _ := Entries(e.stages); len(list) != 1 {
+	if list, _ := apply.Entries(e.stages); len(list) != 1 {
 		t.Errorf("при отказе новой записи быть не должно: %d", len(list))
 	}
 }
@@ -150,7 +152,7 @@ func TestEntries(t *testing.T) {
 	e := gitEnv(t)
 	e.run(e.patch(t, "patch-a.zip", entry{name: "x.txt", body: "x\n"}, entry{name: ".sky/operation/commit", body: "feat: x\n"}))
 	e.run(e.patch(t, "patch-b.zip", entry{name: "y.txt", body: "y\n"}))
-	list, err := Entries(e.stages)
+	list, err := apply.Entries(e.stages)
 	if err != nil || len(list) != 2 {
 		t.Fatalf("%v %v", list, err)
 	}
@@ -171,7 +173,7 @@ func TestUndoNPatches(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	res, es, err := Undo(e.root, e.stages, 2)
+	res, es, err := apply.Undo(e.root, e.stages, 2)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -190,10 +192,10 @@ func TestUndoNPatches(t *testing.T) {
 	if !strings.Contains(res.Stage, "rollback-0002_0003") {
 		t.Errorf("имя записи: %s", res.Stage)
 	}
-	if _, _, err := Undo(e.root, e.stages, 17); err == nil {
+	if _, _, err := apply.Undo(e.root, e.stages, 17); err == nil {
 		t.Error("глубина больше 16 должна отклоняться")
 	}
-	if _, _, err := Undo(e.root, e.stages, 99); err == nil {
+	if _, _, err := apply.Undo(e.root, e.stages, 99); err == nil {
 		t.Error("глубина больше числа записей должна отклоняться")
 	}
 }
@@ -206,7 +208,7 @@ func TestUndoNCommits(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	res, _, err := Undo(e.root, e.stages, 3)
+	res, _, err := apply.Undo(e.root, e.stages, 3)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -223,16 +225,16 @@ func TestUndoNCommits(t *testing.T) {
 
 func TestHistoryPrunedTo16(t *testing.T) {
 	e := newEnv(t)
-	for i := 0; i < KeepHistory+3; i++ {
+	for i := 0; i < apply.KeepHistory+3; i++ {
 		if _, err := e.run(e.patch(t, "patch-n.zip", entry{name: "a.txt", body: string(rune('a'+i%20)) + "\n"})); err != nil {
 			t.Fatal(err)
 		}
 	}
-	list, _ := Entries(e.stages)
-	if len(list) != KeepHistory {
+	list, _ := apply.Entries(e.stages)
+	if len(list) != apply.KeepHistory {
 		t.Fatalf("записей: %d", len(list))
 	}
-	if list[len(list)-1].Num != KeepHistory+3 {
+	if list[len(list)-1].Num != apply.KeepHistory+3 {
 		t.Errorf("новейшая запись потеряна: %d", list[len(list)-1].Num)
 	}
 }
@@ -243,8 +245,8 @@ func TestBackupNoted(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	NoteBackup(res.Stage, "0001-x-before-patch-a.zip")
-	list, _ := Entries(e.stages)
+	apply.NoteBackup(res.Stage, "0001-x-before-patch-a.zip")
+	list, _ := apply.Entries(e.stages)
 	if list[0].Backup != "0001-x-before-patch-a.zip" {
 		t.Errorf("backup: %q", list[0].Backup)
 	}

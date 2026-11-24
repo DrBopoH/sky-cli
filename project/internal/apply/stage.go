@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/DrBopoH/sky-cli/internal/ops"
+	"github.com/DrBopoH/sky-cli/internal/notation"
 )
 
 const (
@@ -26,7 +26,7 @@ type change struct {
 	Path   string
 	Old    []byte // прежнее содержимое для modified и deleted
 	OldExe bool
-	Effect ops.Effect
+	Effect Effect
 }
 
 var nameSafe = regexp.MustCompile(`[^A-Za-z0-9._-]`)
@@ -47,7 +47,7 @@ func nextStageDir(stages, patchName string) (string, error) {
 }
 
 // classify сверяет эффекты с диском: что создаётся, меняется, удаляется; неизменные записи отбрасывает.
-func classify(root string, effects []ops.Effect) (changes []change, same []string, err error) {
+func classify(root string, effects []Effect) (changes []change, same []string, err error) {
 	for _, e := range effects {
 		abs, err := resolve(root, e.Path)
 		if err != nil {
@@ -68,7 +68,7 @@ func classify(root string, effects []ops.Effect) (changes []change, same []strin
 			}
 		}
 		switch e.Kind {
-		case ops.Write:
+		case Write:
 			switch {
 			case !exists:
 				changes = append(changes, change{Status: StCreated, Path: e.Path, Effect: e})
@@ -77,7 +77,7 @@ func classify(root string, effects []ops.Effect) (changes []change, same []strin
 			default:
 				changes = append(changes, change{Status: StModified, Path: e.Path, Old: old, OldExe: fi.Mode()&0o111 != 0, Effect: e})
 			}
-		case ops.Delete:
+		case Delete:
 			if exists {
 				changes = append(changes, change{Status: StDeleted, Path: e.Path, Old: old, OldExe: fi.Mode()&0o111 != 0, Effect: e})
 			}
@@ -172,9 +172,9 @@ func execute(root string, changes []change) error {
 			return err
 		}
 		switch c.Effect.Kind {
-		case ops.Write:
+		case Write:
 			err = writeFile(abs, c.Effect.Content, c.Effect.Exec)
-		case ops.Delete:
+		case Delete:
 			if err = os.Remove(abs); err == nil {
 				pruneEmpty(root, abs)
 			}
@@ -192,7 +192,7 @@ func Restore(root, stageDir string) error {
 	if err != nil {
 		return err
 	}
-	recs, err := ops.Parse(string(man), 2)
+	recs, err := notation.Parse(string(man), 2)
 	if err != nil {
 		return err
 	}

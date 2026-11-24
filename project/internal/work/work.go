@@ -12,7 +12,6 @@ import (
 	"github.com/DrBopoH/sky-cli/internal/apply"
 	"github.com/DrBopoH/sky-cli/internal/gitx"
 	"github.com/DrBopoH/sky-cli/internal/look"
-	"github.com/DrBopoH/sky-cli/internal/ops"
 	"github.com/DrBopoH/sky-cli/internal/pack"
 	"github.com/DrBopoH/sky-cli/internal/repo"
 )
@@ -32,13 +31,17 @@ type Applied struct {
 }
 
 // ApplyPatch снимает полный снимок проекта «до», применяет патч и связывает запись history со снимком.
-func ApplyPatch(l repo.Layout, patch string) (Applied, error) {
+func ApplyPatch(l repo.Layout, patch string, plan apply.Planner) (Applied, error) {
 	name := filepath.Base(patch)
 	bk, err := pack.Make(pack.Options{Root: l.Root, Backups: l.Backups, Kind: pack.Before, Label: name})
 	if err != nil {
 		return Applied{}, fmt.Errorf("%s: не удалось сделать снимок проекта, патч не применён: %w", name, err)
 	}
-	res, err := apply.Run(l.Root, l.History, patch)
+	p, err := plan(l.Root, patch)
+	if err != nil {
+		return Applied{}, fmt.Errorf("%s: %w", name, err)
+	}
+	res, err := apply.Run(l.Root, l.History, patch, p)
 	if err != nil {
 		return Applied{}, fmt.Errorf("%s: %w", name, err)
 	}
@@ -76,7 +79,7 @@ func RollbackForce(l repo.Layout, n int) (Forced, error) {
 	if err != nil {
 		return Forced{}, fmt.Errorf("снимок %s не читается: %v", target.Backup, err)
 	}
-	var effects []ops.Effect
+	var effects []apply.Effect
 	skipped := 0
 	for p, f := range snap {
 		if !restorable(p) {
@@ -86,7 +89,7 @@ func RollbackForce(l repo.Layout, n int) (Forced, error) {
 			skipped++
 			continue
 		}
-		effects = append(effects, ops.Effect{Kind: ops.Write, Path: p, Content: f.Data, Exec: f.Exec})
+		effects = append(effects, apply.Effect{Kind: apply.Write, Path: p, Content: f.Data, Exec: f.Exec})
 	}
 	for _, p := range look.Paths(l.Root) {
 		if _, ok := snap[p]; ok || !restorable(p) || apply.GuardPath(p) != nil {
@@ -96,7 +99,7 @@ func RollbackForce(l repo.Layout, n int) (Forced, error) {
 		if err != nil || !fi.Mode().IsRegular() || fi.Size() > pack.MaxFile {
 			continue
 		}
-		effects = append(effects, ops.Effect{Kind: ops.Delete, Path: p})
+		effects = append(effects, apply.Effect{Kind: apply.Delete, Path: p})
 	}
 	sort.Slice(effects, func(i, j int) bool { return effects[i].Path < effects[j].Path })
 	src := fmt.Sprintf("откат --force до снимка %s", target.Backup)

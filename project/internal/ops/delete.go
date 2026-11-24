@@ -1,6 +1,10 @@
 package ops
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/DrBopoH/sky-cli/internal/apply"
+)
 
 var deleteOp = Operation{
 	Name:   "delete",
@@ -21,5 +25,5 @@ func planDelete(f []string, w World) (Result, error) {
 	case isDir:
 		return Result{}, fmt.Errorf("%s: это папка, delete удаляет только файлы", p)
 	}
-	return Result{Effects: []Effect{{Kind: Delete, Path: p}}}, nil
+	return Result{Effects: []apply.Effect{{Kind: apply.Delete, Path: p}}}, nil
 }
