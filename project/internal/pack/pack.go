@@ -102,7 +102,8 @@ func sniff(abs string) (binary bool, head []string) {
 	return false, head
 }
 
-func humanSize(n int64) string {
+// HumanSize — размер для людей: Б, КБ или МБ.
+func HumanSize(n int64) string {
 	switch {
 	case n >= 1<<20:
 		return fmt.Sprintf("%.1f МБ", float64(n)/float64(1<<20))
@@ -270,7 +271,7 @@ func markdown(o Options, r Report, head string) string {
 	} else {
 		b.WriteString("Снимок: коммитов ещё нет.\n")
 	}
-	fmt.Fprintf(&b, "\nфайлов: %d, исходный размер: %s\n", r.Files, humanSize(r.Raw))
+	fmt.Fprintf(&b, "\nфайлов: %d, исходный размер: %s\n", r.Files, HumanSize(r.Raw))
 	b.WriteString("отбор файлов: git (отслеживаемые и новые без игнорируемых) и из .sky/: clouds/, sky.conf")
 	if o.ForChat {
 		b.WriteString(", readme/, foryou/")
@@ -297,7 +298,7 @@ func markdown(o Options, r Report, head string) string {
 			fmt.Fprintf(&b, "  %s: %s\n", s.Path, s.Reason)
 			continue
 		}
-		fmt.Fprintf(&b, "  %s: %s, %s, %s\n", s.Path, s.Reason, humanSize(s.Size), kind)
+		fmt.Fprintf(&b, "  %s: %s, %s, %s\n", s.Path, s.Reason, HumanSize(s.Size), kind)
 		if i < headFiles {
 			for _, l := range s.Head {
 				fmt.Fprintf(&b, "    | %s\n", l)

@@ -40,7 +40,7 @@ func runUp(a *App, env Env, args []string) error {
 	if err := l.WriteForyouFile("archive.md", []byte(rep.Markdown)); err != nil {
 		fmt.Fprintf(env.Out, "⚠ archive.md не записан: %v\n", err)
 	}
-	fmt.Fprintf(env.Out, "✓ %s (%s, файлов: %d)\n", rep.Zip, sizeStr(rep.Size), rep.Files)
+	fmt.Fprintf(env.Out, "✓ %s (%s, файлов: %d)\n", rep.Zip, pack.HumanSize(rep.Size), rep.Files)
 	for _, s := range rep.Sensitive {
 		fmt.Fprintf(env.Out, "⚠ в архиве файл с именем базы или ключа, не закрытый .gitignore: %s\n", s)
 	}
@@ -48,7 +48,7 @@ func runUp(a *App, env Env, args []string) error {
 		fmt.Fprintf(env.Out, "· пропущено файлов: %d (список в foryou/archive.md)\n", n)
 	}
 	if rep.OverWarn {
-		fmt.Fprintf(env.Out, "⚠ архив больше %s: вложение в чат может не пройти\n", sizeStr(pack.WarnTotal))
+		fmt.Fprintf(env.Out, "⚠ архив больше %s: вложение в чат может не пройти\n", pack.HumanSize(pack.WarnTotal))
 	}
 	if clip(rep.Zip) {
 		fmt.Fprintln(env.Out, "📋 в буфере обмена: вставь Ctrl+V в чат")
@@ -56,13 +56,6 @@ func runUp(a *App, env Env, args []string) error {
 		fmt.Fprintln(env.Out, "· буфер обмена недоступен (нужен wl-copy или xclip), файл по пути выше")
 	}
 	return nil
-}
-
-func sizeStr(n int64) string {
-	if n >= 1<<20 {
-		return fmt.Sprintf("%.1f МБ", float64(n)/float64(1<<20))
-	}
-	return fmt.Sprintf("%.1f КБ", float64(n)/1024)
 }
 
 // SKY_NO_CLIP=1 отключает работу с буфером (для тестов).
