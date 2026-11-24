@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -12,7 +13,12 @@ import (
 	"github.com/DrBopoH/sky-cli/internal/ops"
 )
 
-const commitTag = "# commit: "
+const (
+	commitTag = "# commit: "
+	backupTag = "# backup: "
+	// KeepHistory — сколько записей хранит history/; столько же патчей можно откатить за раз.
+	KeepHistory = 16
+)
 
 // noteCommit дописывает в manifest.txt записи хэш коммита, созданного патчем: по нему откат снимет коммит.
 func noteCommit(stageDir, full string) {
@@ -24,13 +30,33 @@ func noteCommit(stageDir, full string) {
 	fmt.Fprintf(f, "%s%s\n", commitTag, full)
 }
 
-// Entry — одна запись в .sky/stages/.
+// NoteBackup дописывает в manifest.txt записи имя полного снимка «до».
+func NoteBackup(stageDir, name string) {
+	f, err := os.OpenFile(filepath.Join(stageDir, "manifest.txt"), os.O_APPEND|os.O_WRONLY, 0o644)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	fmt.Fprintf(f, "%s%s\n", backupTag, name)
+}
+
+// PruneHistory оставляет KeepHistory последних записей.
+func PruneHistory(historyDir string) {
+	es, _ := Entries(historyDir)
+	for len(es) > KeepHistory {
+		os.RemoveAll(es[0].Dir)
+		es = es[1:]
+	}
+}
+
+// Entry — одна запись в .sky/stages/history/.
 type Entry struct {
 	Name   string // NNNN-время-имя
 	Num    int
 	Source string // имя патча или «откат …» из manifest.txt
 	Files  int
 	Commit string // полный хэш коммита патча; пусто — коммита не было
+	Backup string // имя полного снимка «до» в backups/; пусто — снимка нет (откат)
 	Dir    string
 }
 
@@ -47,6 +73,8 @@ func readStage(dir string) (Entry, error) {
 		switch {
 		case strings.HasPrefix(line, "# patch: "):
 			e.Source = strings.TrimPrefix(line, "# patch: ")
+		case strings.HasPrefix(line, backupTag):
+			e.Backup = strings.TrimSpace(strings.TrimPrefix(line, backupTag))
 		case strings.HasPrefix(line, commitTag):
 			e.Commit = strings.TrimSpace(strings.TrimPrefix(line, commitTag))
 		case line != "" && !strings.HasPrefix(line, "#"):
@@ -127,68 +155,48 @@ func inverse(e Entry) ([]ops.Effect, error) {
 	return out, nil
 }
 
-// Undo откатывает последнюю запись stages/. Откат — тоже запись (с «до» текущего состояния), поэтому повторный
-// откат возвращает всё назад. Если запись создала коммит и он вершина ветки, коммит снимается (reset --mixed HEAD~1).
-func Undo(root, stagesDir string) (Result, Entry, error) {
-	list, err := Entries(stagesDir)
-	if err != nil {
-		return Result{}, Entry{}, err
-	}
-	if len(list) == 0 {
-		return Result{}, Entry{}, fmt.Errorf("в .sky/stages/ нет записей, откатывать нечего")
-	}
-	target := list[len(list)-1]
+func gitOK(root string, args ...string) bool {
+	return exec.Command("git", append([]string{"-C", root}, args...)...).Run() == nil
+}
 
-	var parent bool
-	if target.Commit != "" {
-		head, err := git(root, "rev-parse", "HEAD")
-		if err != nil || head != target.Commit {
-			return Result{}, target, fmt.Errorf("запись %s создала коммит %.7s, но он уже не вершина ветки: откат вручную (git)", target.Name, target.Commit)
+// Commits возвращает хэши коммитов записей (пустые пропускаются).
+func Commits(es []Entry) []string {
+	var out []string
+	for _, e := range es {
+		if e.Commit != "" {
+			out = append(out, e.Commit)
 		}
-		if _, err := git(root, "rev-parse", "--verify", "-q", "HEAD~1"); err != nil {
-			return Result{}, target, fmt.Errorf("коммит %.7s корневой: откат с его снятием не поддерживается", target.Commit)
-		}
-		parent = true
 	}
+	return out
+}
 
-	effects, err := inverse(target)
-	if err != nil {
-		return Result{}, target, err
-	}
+// RunEffects применяет эффекты как новую запись history/ (с «до» затронутых файлов), при ошибке откатывает.
+func RunEffects(root, historyDir, dirName, source string, effects []ops.Effect) (Result, error) {
 	if err := checkEffects(root, effects); err != nil {
-		return Result{}, target, err
+		return Result{}, err
 	}
 	changes, same, err := classify(root, effects)
 	if err != nil {
-		return Result{}, target, err
+		return Result{}, err
 	}
-	stage, err := nextStageDir(stagesDir, fmt.Sprintf("rollback-%04d", target.Num))
+	stage, err := nextStageDir(historyDir, dirName)
 	if err != nil {
-		return Result{}, target, err
+		return Result{}, err
 	}
-	fail := func(err error) (Result, Entry, error) {
+	fail := func(err error) (Result, error) {
 		os.RemoveAll(stage)
-		return Result{}, target, err
+		return Result{}, err
 	}
-	if err := saveBefore(stage, fmt.Sprintf("откат %s", target.Name), changes); err != nil {
+	if err := saveBefore(stage, source, changes); err != nil {
 		return fail(err)
 	}
 	if err := execute(root, changes); err != nil {
 		if rerr := Restore(root, stage); rerr != nil {
-			return Result{Stage: stage}, target, fmt.Errorf("%w; откат не завершён, снимок в %s: %v", err, stage, rerr)
+			return Result{Stage: stage}, fmt.Errorf("%w; откат не завершён, снимок в %s: %v", err, stage, rerr)
 		}
 		return fail(err)
 	}
 	res := Result{Stage: stage}
-	if parent {
-		if _, err := git(root, "reset", "-q", "--mixed", "HEAD~1"); err != nil {
-			if rerr := Restore(root, stage); rerr != nil {
-				return Result{Stage: stage}, target, fmt.Errorf("%w; откат не завершён, снимок в %s: %v", err, stage, rerr)
-			}
-			return fail(err)
-		}
-		res.Notes = append(res.Notes, fmt.Sprintf("коммит %.7s снят (git reset --mixed HEAD~1)", target.Commit))
-	}
 	for _, c := range changes {
 		mark := map[string]string{StCreated: "+", StModified: "~", StDeleted: "-"}[c.Status]
 		res.Lines = append(res.Lines, Line{mark, c.Path})
@@ -196,5 +204,98 @@ func Undo(root, stagesDir string) (Result, Entry, error) {
 	for _, p := range same {
 		res.Lines = append(res.Lines, Line{"=", p})
 	}
-	return res, target, nil
+	return res, nil
+}
+
+// Last возвращает n последних записей (новые первыми).
+func Last(historyDir string, n int) ([]Entry, error) {
+	list, err := Entries(historyDir)
+	if err != nil {
+		return nil, err
+	}
+	if len(list) == 0 {
+		return nil, fmt.Errorf("в .sky/stages/history/ нет записей, откатывать нечего")
+	}
+	if n < 1 || n > KeepHistory {
+		return nil, fmt.Errorf("глубина отката от 1 до %d", KeepHistory)
+	}
+	if n > len(list) {
+		return nil, fmt.Errorf("в history/ записей: %d, откатить %d нельзя", len(list), n)
+	}
+	out := make([]Entry, 0, n)
+	for i := 0; i < n; i++ {
+		out = append(out, list[len(list)-1-i])
+	}
+	return out, nil
+}
+
+func label(es []Entry) string { // es: новые первыми
+	if len(es) == 1 {
+		return fmt.Sprintf("%04d", es[0].Num)
+	}
+	return fmt.Sprintf("%04d_%04d", es[len(es)-1].Num, es[0].Num)
+}
+
+// Undo (soft) откатывает n последних записей history/ одной новой записью. Если среди них есть коммиты,
+// они должны подряд лежать на вершине ветки: тогда снимаются (reset --mixed), иначе отказ без изменений.
+func Undo(root, historyDir string, n int) (Result, []Entry, error) {
+	es, err := Last(historyDir, n)
+	if err != nil {
+		return Result{}, nil, err
+	}
+	k := 0
+	for _, e := range es {
+		if e.Commit == "" || !gitOK(root, "merge-base", "--is-ancestor", e.Commit, "HEAD") {
+			continue // коммита не было или он уже снят
+		}
+		top, err := git(root, "rev-parse", fmt.Sprintf("HEAD~%d", k))
+		if err != nil || top != e.Commit {
+			return Result{}, es, fmt.Errorf("запись %s создала коммит %.7s, но он не лежит подряд на вершине ветки: откат вручную (git)", e.Name, e.Commit)
+		}
+		k++
+	}
+	if k > 0 {
+		if _, err := git(root, "rev-parse", "--verify", "-q", fmt.Sprintf("HEAD~%d", k)); err != nil {
+			return Result{}, es, fmt.Errorf("снимаемые коммиты доходят до корня истории: откат с их снятием не поддерживается")
+		}
+	}
+	merged := map[string]ops.Effect{}
+	for _, e := range es { // от новых к старым: побеждает самая старая запись
+		eff, err := inverse(e)
+		if err != nil {
+			return Result{}, es, err
+		}
+		for _, x := range eff {
+			merged[x.Path] = x
+		}
+	}
+	paths := make([]string, 0, len(merged))
+	for p := range merged {
+		paths = append(paths, p)
+	}
+	sort.Strings(paths)
+	effects := make([]ops.Effect, len(paths))
+	for i, p := range paths {
+		effects[i] = merged[p]
+	}
+	src := "откат " + es[0].Name
+	if len(es) > 1 {
+		src = fmt.Sprintf("откат %d записей: %s..%s", len(es), es[len(es)-1].Name, es[0].Name)
+	}
+	res, err := RunEffects(root, historyDir, "rollback-"+label(es), src, effects)
+	if err != nil {
+		return Result{}, es, err
+	}
+	if k > 0 {
+		if _, err := git(root, "reset", "-q", "--mixed", fmt.Sprintf("HEAD~%d", k)); err != nil {
+			if rerr := Restore(root, res.Stage); rerr != nil {
+				return Result{Stage: res.Stage}, es, fmt.Errorf("%w; откат не завершён, снимок в %s: %v", err, res.Stage, rerr)
+			}
+			os.RemoveAll(res.Stage)
+			return Result{}, es, err
+		}
+		res.Notes = append(res.Notes, fmt.Sprintf("коммитов снято: %d (git reset --mixed HEAD~%d)", k, k))
+	}
+	PruneHistory(historyDir)
+	return res, es, nil
 }

@@ -10,6 +10,7 @@ import (
 
 	"github.com/DrBopoH/sky-cli/internal/apply"
 	"github.com/DrBopoH/sky-cli/internal/conf"
+	"github.com/DrBopoH/sky-cli/internal/pack"
 	"github.com/DrBopoH/sky-cli/internal/repo"
 )
 
@@ -17,7 +18,7 @@ func applyCommand() Command {
 	return Command{
 		Name:      "apply",
 		Usage:     "sky apply [--force]",
-		Summary:   "применить все patch*.zip из inbox от старых к новым: проверить, сохранить «до» в .sky/stages/, выполнить операции, записать файлы, перенести патч в stages",
+		Summary:   "применить все patch*.zip из inbox от старых к новым: проверить, снять полный снимок проекта в .sky/stages/backups/ и «до» изменённых файлов в .sky/stages/history/, выполнить операции, записать файлы, перенести патч в history",
 		NeedsInit: true,
 		Run:       withLook(runApply, true),
 	}
@@ -58,10 +59,15 @@ func runApply(a *App, env Env, args []string) error {
 	for _, p := range patches {
 		name := filepath.Base(p)
 		fmt.Fprintf(env.Out, "── %s\n", name)
-		res, err := apply.Run(l.Root, l.Stages, p)
+		bk, err := pack.Make(pack.Options{Root: l.Root, Backups: l.Backups, Kind: pack.Before, Label: name})
+		if err != nil {
+			return fmt.Errorf("%s: не удалось сделать снимок проекта, патч не применён: %w", name, err)
+		}
+		res, err := apply.Run(l.Root, l.History, p)
 		if err != nil {
 			return fmt.Errorf("%s: %w", name, err)
 		}
+		apply.NoteBackup(res.Stage, filepath.Base(bk.Zip))
 		for _, ln := range res.Lines {
 			fmt.Fprintf(env.Out, "  %s %s\n", ln.Mark, ln.Path)
 		}
@@ -73,6 +79,8 @@ func runApply(a *App, env Env, args []string) error {
 		}
 		rel, _ := filepath.Rel(l.Root, res.Stage)
 		fmt.Fprintf(env.Out, "● запись %s\n", filepath.ToSlash(rel))
+		brel, _ := filepath.Rel(l.Root, bk.Zip)
+		fmt.Fprintf(env.Out, "● снимок проекта до патча %s\n", filepath.ToSlash(brel))
 	}
 	return nil
 }

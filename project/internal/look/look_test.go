@@ -78,7 +78,7 @@ func TestStatusFacts(t *testing.T) {
 	in := input(d)
 	in.Patches = []string{"patch-1.zip", "patch-2.zip"}
 	s := get(Build(in), "status.md")
-	for _, want := range []string{"ветка: main", "feat: first", "M a.txt", "? new.txt", "patch-1.zip, patch-2.zip", "origin https://example.org/r.git", "scope: project/", "последняя запись stages: нет"} {
+	for _, want := range []string{"ветка: main", "feat: first", "M a.txt", "? new.txt", "patch-1.zip, patch-2.zip", "origin https://example.org/r.git", "scope: project/", "последняя запись history: нет"} {
 		if !strings.Contains(s, want) {
 			t.Errorf("нет %q:\n%s", want, s)
 		}

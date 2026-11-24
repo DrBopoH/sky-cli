@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -50,12 +51,16 @@ func refreshForyou(l repo.Layout) ([]string, error) {
 			patches = append(patches, filepath.Base(p))
 		}
 	}
-	files := look.Build(look.Input{Root: l.Root, Stages: l.Stages, Conf: c, Inbox: c.Inbox, Patches: patches})
+	files := look.Build(look.Input{Root: l.Root, Stages: l.History, Conf: c, Inbox: c.Inbox, Patches: patches})
 	gen := make([]repo.Generated, len(files))
 	names := make([]string, len(files))
 	for i, f := range files {
 		gen[i] = repo.Generated{Name: f.Name, Content: []byte(f.Content)}
 		names[i] = f.Name
+	}
+	// archive.md пишет sky up; обновление foryou его сохраняет
+	if b, err := os.ReadFile(filepath.Join(l.Foryou, "archive.md")); err == nil {
+		gen = append(gen, repo.Generated{Name: "archive.md", Content: b})
 	}
 	if _, err := l.SyncForyou(gen); err != nil {
 		return nil, err

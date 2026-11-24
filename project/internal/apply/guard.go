@@ -12,6 +12,9 @@ import (
 
 var secretRe = regexp.MustCompile(`\.(db|sqlite|sqlite3|env|pem|key)(-wal|-shm)?$`)
 
+// IsSensitive сообщает, похоже ли имя на базу или ключ (по расширению).
+func IsSensitive(p string) bool { return secretRe.MatchString(p) }
+
 // GuardPath — единственная проверка путей патча: и файлов, и записей операций.
 func GuardPath(p string) error {
 	switch {

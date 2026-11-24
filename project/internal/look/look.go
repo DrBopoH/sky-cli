@@ -82,7 +82,7 @@ func orNone(ss []string, f func(string) string) string {
 
 func status(in Input, head, snap string) string {
 	var b strings.Builder
-	b.WriteString("Состояние рабочего дерева: ветка, HEAD, незакоммиченное, remote, патчи в inbox, последняя запись stages. Читай первым.\n" + snap + "\n\n")
+	b.WriteString("Состояние рабочего дерева: ветка, HEAD, незакоммиченное, remote, патчи в inbox, последняя запись history. Читай первым.\n" + snap + "\n\n")
 	branch := git(in.Root, "branch", "--show-current")
 	if branch == "" {
 		branch = "(нет текущей ветки)"
@@ -129,9 +129,9 @@ func status(in Input, head, snap string) string {
 		if e.Commit != "" {
 			commit = fmt.Sprintf(", коммит %.7s", e.Commit)
 		}
-		fmt.Fprintf(&b, "последняя запись stages: %04d %s%s\n", e.Num, e.Source, commit)
+		fmt.Fprintf(&b, "последняя запись history: %04d %s%s\n", e.Num, e.Source, commit)
 	} else {
-		b.WriteString("последняя запись stages: нет\n")
+		b.WriteString("последняя запись history: нет\n")
 	}
 	return b.String()
 }
@@ -184,8 +184,9 @@ func history(in Input, snap string) string {
 	return b.String()
 }
 
-func paths(in Input) []string {
-	out, err := exec.Command("git", "-C", in.Root, "ls-files", "-z", "--cached", "--others", "--exclude-standard", "--deduplicate").Output()
+// Paths — файлы репозитория по версии git: отслеживаемые и новые без игнорируемых; удалённые с диска пропускаются.
+func Paths(root string) []string {
+	out, err := exec.Command("git", "-C", root, "ls-files", "-z", "--cached", "--others", "--exclude-standard", "--deduplicate").Output()
 	if err != nil {
 		return nil
 	}
@@ -194,7 +195,7 @@ func paths(in Input) []string {
 		if p == "" {
 			continue
 		}
-		if _, err := os.Lstat(filepath.Join(in.Root, p)); err != nil {
+		if _, err := os.Lstat(filepath.Join(root, p)); err != nil {
 			continue // удалён с диска, но ещё в индексе
 		}
 		ps = append(ps, p)
@@ -202,6 +203,8 @@ func paths(in Input) []string {
 	sort.Strings(ps)
 	return ps
 }
+
+func paths(in Input) []string { return Paths(in.Root) }
 
 func capped(b *strings.Builder, rows []string) {
 	n := len(rows)
@@ -265,7 +268,7 @@ func graph(in Input, snap string) string {
 
 func stages(in Input, snap string) string {
 	var b strings.Builder
-	b.WriteString("Записи .sky/stages/: применённые патчи и откаты, от старых к новым. Читай, когда нужно знать, что уже применялось.\n" + snap + "\n\n")
+	b.WriteString("Записи .sky/stages/history/: применённые патчи и откаты, от старых к новым. Читай, когда нужно знать, что уже применялось.\n" + snap + "\n\n")
 	es, _ := apply.Entries(in.Stages)
 	if len(es) == 0 {
 		b.WriteString("записей нет\n")

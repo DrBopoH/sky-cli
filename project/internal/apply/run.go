@@ -14,14 +14,14 @@ type Line struct {
 }
 
 type Result struct {
-	Stage  string // папка записи в .sky/stages/
+	Stage  string // папка записи в .sky/stages/history/
 	Commit string // «хэш сообщение» созданного коммита; пусто — коммита не было
 	Lines  []Line
 	Notes  []string
 }
 
 // Run применяет один патч. Проверка и план строятся до любой записи; ошибка при записи откатывает уже сделанное.
-// Применённый патч переносится в запись stages/; при ошибке остаётся там, где лежал.
+// Применённый патч переносится в запись history/; при ошибке остаётся там, где лежал.
 func Run(root, stagesDir, patchPath string) (Result, error) {
 	plan, err := Build(root, patchPath)
 	if err != nil {
@@ -87,6 +87,7 @@ func Run(root, stagesDir, patchPath string) (Result, error) {
 	for _, p := range same {
 		res.Lines = append(res.Lines, Line{"=", p})
 	}
+	PruneHistory(stagesDir)
 	return res, nil
 }
 

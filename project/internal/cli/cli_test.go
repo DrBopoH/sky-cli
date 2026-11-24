@@ -531,6 +531,57 @@ func TestRollbackCommand(t *testing.T) {
 	}
 }
 
+func TestRollbackForce(t *testing.T) {
+	dir, inbox := project(t)
+	zipPatch(t, filepath.Join(inbox, "patch-1.zip"), map[string]string{
+		"project/a.txt": "a1\n", ".sky/operation/commit": "feat: add a\n",
+	})
+	zipPatch(t, filepath.Join(inbox, "patch-2.zip"), map[string]string{
+		"project/a.txt": "a2\n", "project/b.txt": "b\n", ".sky/operation/commit": "feat: add b\n",
+	})
+	if code, out, errs := run(New(), dir, "apply"); code != 0 {
+		t.Fatalf("%d %s %s", code, out, errs)
+	}
+	head := git(t, dir, "rev-parse", "HEAD")
+	code, out, errs := run(New(), dir, "rollback", "--force", "2")
+	if code != 0 {
+		t.Fatalf("%d %s %s", code, out, errs)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "project", "a.txt")); err == nil {
+		t.Error("a.txt появился патчем 1, после force 2 его быть не должно")
+	}
+	if _, err := os.Stat(filepath.Join(dir, "project", "b.txt")); err == nil {
+		t.Error("b.txt должен быть удалён")
+	}
+	if git(t, dir, "rev-parse", "HEAD") != head {
+		t.Error("force не трогает коммиты")
+	}
+	if !strings.Contains(out, "коммиты этих патчей не тронуты") {
+		t.Errorf("вывод: %s", out)
+	}
+	// force откат — запись; обычный откат возвращает файлы
+	if code, _, errs := run(New(), dir, "rollback"); code != 1 && code != 0 {
+		t.Fatal(errs)
+	}
+	if b, _ := os.ReadFile(filepath.Join(dir, "project", "a.txt")); string(b) != "a2\n" {
+		t.Errorf("откат force-записи должен вернуть файлы: %q", b)
+	}
+	// у записи отката снимка нет
+	run(New(), dir, "rollback")
+	if code, _, errs := run(New(), dir, "rollback", "--force"); code != 1 || !strings.Contains(errs, "нет полного снимка") {
+		t.Errorf("%d %s", code, errs)
+	}
+}
+
+func TestRollbackArgs(t *testing.T) {
+	dir, _ := project(t)
+	for _, a := range [][]string{{"1", "2"}, {"list", "--force"}, {"list", "3"}, {"-1"}} {
+		if code, _, _ := run(New(), dir, append([]string{"rollback"}, a...)...); code != 1 {
+			t.Errorf("%v: код %d", a, code)
+		}
+	}
+}
+
 func TestRollbackEmpty(t *testing.T) {
 	dir, _ := project(t)
 	if code, _, errs := run(New(), dir, "rollback"); code != 1 || !strings.Contains(errs, "нет записей") {
@@ -570,5 +621,58 @@ func TestLookCommand(t *testing.T) {
 	}
 	if code, _, _ := run(New(), dir, "look", "x"); code != 1 {
 		t.Error("аргументы не принимаются")
+	}
+}
+
+func TestUpCommand(t *testing.T) {
+	t.Setenv("SKY_NO_CLIP", "1")
+	tmp := t.TempDir()
+	t.Setenv("TMPDIR", tmp)
+	dir := gitDir(t)
+	run(New(), dir, "init")
+	code, out, errs := run(New(), dir, "up")
+	if code != 0 || !strings.Contains(out, "-up.zip") {
+		t.Fatalf("%d %s %s", code, out, errs)
+	}
+	l := repo.At(dir)
+	run(New(), dir, "up")
+	zs, _ := filepath.Glob(filepath.Join(tmp, "sky-up", "*-up.zip"))
+	if len(zs) != 1 {
+		t.Fatalf("архивов: %v", zs)
+	}
+	if bs, _ := filepath.Glob(filepath.Join(l.Backups, "*")); len(bs) != 0 {
+		t.Errorf("up не пишет в backups/: %v", bs)
+	}
+	md, err := os.ReadFile(filepath.Join(l.Foryou, "archive.md"))
+	if err != nil || !strings.Contains(string(md), "файлов:") {
+		t.Fatalf("archive.md: %v %s", err, md)
+	}
+	// обновление foryou после других команд не должно стирать archive.md
+	run(New(), dir, "look")
+	if _, err := os.Stat(filepath.Join(l.Foryou, "archive.md")); err != nil {
+		t.Error("look стёр archive.md")
+	}
+	if code, _, _ := run(New(), dir, "up", "x"); code != 1 {
+		t.Error("аргументы не принимаются")
+	}
+	// архив не попадает ни в inbox-маску, ни в записи rollback
+	if code, _, errs := run(New(), dir, "rollback"); code != 1 || !strings.Contains(errs, "нет записей") {
+		t.Errorf("backups/ не должна считаться записью stages: %d %s", code, errs)
+	}
+}
+
+func TestApplyMakesBackupBeforePatch(t *testing.T) {
+	dir, inbox := project(t)
+	os.WriteFile(filepath.Join(dir, "project", "keep.txt"), []byte("прежнее\n"), 0o644)
+	git(t, dir, "add", "-A")
+	git(t, dir, "commit", "-q", "-m", "chore: keep")
+	zipPatch(t, filepath.Join(inbox, "patch-1.zip"), map[string]string{"project/keep.txt": "новое\n"})
+	code, out, errs := run(New(), dir, "apply")
+	if code != 0 || !strings.Contains(out, "● снимок проекта до патча") {
+		t.Fatalf("%d %s %s", code, out, errs)
+	}
+	zs, _ := filepath.Glob(filepath.Join(repo.At(dir).Backups, "*-before-patch-1.zip"))
+	if len(zs) != 1 {
+		t.Fatalf("снимков: %v", zs)
 	}
 }

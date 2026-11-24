@@ -15,13 +15,15 @@ import (
 var legacyFiles = []string{"clouds/sky-reglament.md"}
 
 type Layout struct {
-	Root   string // корень git-репозитория
-	Dir    string // .sky/
-	Conf   string // .sky/sky.conf
-	Stages string // .sky/stages/
-	Readme string // .sky/readme/ — неизменяемое, создаёт sky
-	Foryou string // .sky/foryou/ — сгенерированное, создаёт sky
-	Clouds string // .sky/clouds/ — единственное место для записей Claude
+	Root    string // корень git-репозитория
+	Dir     string // .sky/
+	Conf    string // .sky/sky.conf
+	Stages  string // .sky/stages/
+	History string // .sky/stages/history/ — записи применённых патчей и откатов
+	Backups string // .sky/stages/backups/ — полные снимки проекта перед патчами
+	Readme  string // .sky/readme/ — неизменяемое, создаёт sky
+	Foryou  string // .sky/foryou/ — сгенерированное, создаёт sky
+	Clouds  string // .sky/clouds/ — единственное место для записей Claude
 }
 
 func Find(cwd string) (Layout, error) {
@@ -68,13 +70,15 @@ func WriteIfAbsent(path string, content []byte) (bool, error) {
 func At(root string) Layout {
 	dir := filepath.Join(root, ".sky")
 	return Layout{
-		Root:   root,
-		Dir:    dir,
-		Conf:   filepath.Join(dir, "sky.conf"),
-		Stages: filepath.Join(dir, "stages"),
-		Readme: filepath.Join(dir, "readme"),
-		Foryou: filepath.Join(dir, "foryou"),
-		Clouds: filepath.Join(dir, "clouds"),
+		Root:    root,
+		Dir:     dir,
+		Conf:    filepath.Join(dir, "sky.conf"),
+		Stages:  filepath.Join(dir, "stages"),
+		History: filepath.Join(dir, "stages", "history"),
+		Backups: filepath.Join(dir, "stages", "backups"),
+		Readme:  filepath.Join(dir, "readme"),
+		Foryou:  filepath.Join(dir, "foryou"),
+		Clouds:  filepath.Join(dir, "clouds"),
 	}
 }
 
@@ -84,7 +88,7 @@ func (l Layout) Initialized() bool {
 }
 
 func (l Layout) MkDirs() error {
-	for _, d := range []string{l.Stages, l.Readme, l.Foryou, l.Clouds} {
+	for _, d := range []string{l.History, l.Backups, l.Readme, l.Foryou, l.Clouds} {
 		if err := os.MkdirAll(d, 0o755); err != nil {
 			return err
 		}
@@ -273,4 +277,13 @@ func (l Layout) SyncForyou(files []Generated) ([]Change, error) {
 		out = append(out, Change{l.rel(p), Removed})
 	}
 	return out, nil
+}
+
+// WriteForyouFile пишет один файл в foryou/ только для чтения.
+func (l Layout) WriteForyouFile(name string, content []byte) error {
+	if err := l.MkDirs(); err != nil {
+		return err
+	}
+	_, err := writeReadOnly(filepath.Join(l.Foryou, name), l.Foryou, content)
+	return err
 }

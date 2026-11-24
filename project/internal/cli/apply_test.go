@@ -61,7 +61,7 @@ func TestApplyBasic(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("%d %s", code, errs)
 	}
-	for _, want := range []string{"── patch-one.zip", "+ project/a.txt", "+ .sky/clouds/plan.md", "● запись .sky/stages/0001-"} {
+	for _, want := range []string{"── patch-one.zip", "+ project/a.txt", "+ .sky/clouds/plan.md", "● запись .sky/stages/history/0001-"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("в выводе нет %q:\n%s", want, out)
 		}
