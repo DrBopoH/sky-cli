@@ -96,6 +96,7 @@
 - `internal/gitx` — единственная точка доступа к git: все запуски процесса `git` идут через неё.
 - `internal/work` — рабочие процессы ядра: применить патч с полным снимком «до», откат `--force`, проверка чистого дерева; консоль только печатает.
 - Длинные тексты (описания команд и операций, шапки foryou/, шапка sky.conf) лежат в `text/` своего пакета и подключаются через `embed`; в коде остаются короткие сообщения.
+- `internal/guard` — правила путей (`Path`, `Resolve`, `IsSensitive`); `internal/history` — записи history/: чтение, пометки в manifest.txt, лимит 16; их используют apply, look, pack, work.
 - `internal/notation` — общая запись данных: строка, поля через табуляцию (`Parse`, `ParseRange`); ею записаны файлы операций и manifest.txt.
 - `internal/apply` — ядро: `Effect`, `Plan`, `Planner`, `GuardPath`, `CheckEffects`, снимок «до», запись, `Restore`, коммит (`commit.go`), откат (`undo.go`); `record.go` — одна запись history. Ядро получает готовый `Plan` и ничего не знает о форме патча.
 - `internal/ops` — адаптер патча: читает zip в `Plan` (`Build`), реестр и операции (`delete.go`, `commit.go`). Зависит от `apply`, не наоборот; `main.go` (seed) передаёт `ops.Build` и описания операций в `cli.New`; консоль адаптер не импортирует.
