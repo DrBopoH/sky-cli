@@ -62,6 +62,9 @@ func RunManual(root, historyDir, msg string, opts commit.Options) (Result, error
 		return Result{}, rec.drop(fmt.Errorf("в коммит нечего включать (все изменения под .gitignore)"))
 	}
 	res := Result{Stage: rec.stage, Commit: hash + " " + msg, Notes: append(notes, cnotes...), Lines: marks(changes, nil)}
+	if !opts.New {
+		res.Left, _ = gitx.Untracked(root)
+	}
 	PruneHistory(historyDir)
 	return res, nil
 }

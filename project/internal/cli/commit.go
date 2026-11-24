@@ -7,7 +7,6 @@ import (
 
 	"github.com/DrBopoH/sky-cli/internal/apply"
 	"github.com/DrBopoH/sky-cli/internal/commit"
-	"github.com/DrBopoH/sky-cli/internal/gitx"
 	"github.com/DrBopoH/sky-cli/internal/repo"
 )
 
@@ -57,9 +56,9 @@ func runCommit(a *App, env Env, args []string) error {
 	}
 	rel, _ := filepath.Rel(l.Root, res.Stage)
 	fmt.Fprintf(env.Out, "● запись %s\n", filepath.ToSlash(rel))
-	if un := gitx.Try(l.Root, "ls-files", "--others", "--exclude-standard"); un != "" {
+	if len(res.Left) > 0 {
 		fmt.Fprintln(env.Out, "· новые файлы не включены в коммит (sky commit --new добавит их):")
-		for _, f := range strings.Split(un, "\n") {
+		for _, f := range res.Left {
 			fmt.Fprintf(env.Out, "  ? %s\n", f)
 		}
 	}

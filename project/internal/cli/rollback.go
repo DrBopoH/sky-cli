@@ -2,17 +2,13 @@ package cli
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
-	"sort"
 	"strconv"
 	"strings"
 
 	"github.com/DrBopoH/sky-cli/internal/apply"
-	"github.com/DrBopoH/sky-cli/internal/look"
-	"github.com/DrBopoH/sky-cli/internal/ops"
-	"github.com/DrBopoH/sky-cli/internal/pack"
 	"github.com/DrBopoH/sky-cli/internal/repo"
+	"github.com/DrBopoH/sky-cli/internal/work"
 )
 
 func rollbackCommand() Command {
@@ -119,74 +115,13 @@ func rollbackList(env Env, l repo.Layout) error {
 	return nil
 }
 
-// rollbackForce возвращает проект к полному снимку «до» N-го с конца патча.
+// rollbackForce печатает откат по полному снимку; сам откат — work.RollbackForce.
 func rollbackForce(env Env, l repo.Layout, n int) error {
-	es, err := apply.Last(l.History, n)
+	f, err := work.RollbackForce(l, n)
 	if err != nil {
 		return err
 	}
-	target := es[len(es)-1]
-	if target.Backup == "" {
-		return fmt.Errorf("у записи %s нет полного снимка (это откат): используй sky rollback %d без --force", target.Name, n)
-	}
-	zipPath := filepath.Join(l.Backups, target.Backup)
-	if _, err := os.Stat(zipPath); err != nil {
-		return fmt.Errorf("снимок %s удалён (в backups/ хранится 16 последних): используй sky rollback %d без --force", target.Backup, n)
-	}
-	snap, err := pack.ReadSnapshot(zipPath)
-	if err != nil {
-		return fmt.Errorf("снимок %s не читается: %v", target.Backup, err)
-	}
-	var effects []ops.Effect
-	skipped := 0
-	keep := func(p string) bool {
-		return p != ".sky/sky.conf" && !strings.HasPrefix(p, ".sky/foryou/") && !strings.HasPrefix(p, ".sky/readme/")
-	}
-	for p, f := range snap {
-		if !keep(p) {
-			continue
-		}
-		if apply.GuardPath(p) != nil {
-			skipped++
-			continue
-		}
-		effects = append(effects, ops.Effect{Kind: ops.Write, Path: p, Content: f.Data, Exec: f.Exec})
-	}
-	for _, p := range look.Paths(l.Root) {
-		if _, ok := snap[p]; ok || !keep(p) || apply.GuardPath(p) != nil {
-			continue
-		}
-		fi, err := os.Lstat(filepath.Join(l.Root, filepath.FromSlash(p)))
-		if err != nil || !fi.Mode().IsRegular() || fi.Size() > pack.MaxFile {
-			continue
-		}
-		effects = append(effects, ops.Effect{Kind: ops.Delete, Path: p})
-	}
-	sort.Slice(effects, func(i, j int) bool { return effects[i].Path < effects[j].Path })
-	src := fmt.Sprintf("откат --force до снимка %s", target.Backup)
-	res, err := apply.RunEffects(l.Root, l.History, fmt.Sprintf("rollback-force-%04d", target.Num), src, effects)
-	if err != nil {
-		return err
-	}
-	apply.PruneHistory(l.History)
-	fmt.Fprintf(env.Out, "── откат --force: %d записей, до снимка %s\n", len(es), target.Backup)
-	var changed []apply.Line
-	for _, ln := range res.Lines {
-		if ln.Mark != "=" {
-			changed = append(changed, ln)
-		}
-	}
-	res.Lines = changed
-	if skipped > 0 {
-		res.Notes = append(res.Notes, fmt.Sprintf("пропущено файлов, которые патч не принимает: %d", skipped))
-	}
-	if cs := apply.Commits(es); len(cs) > 0 {
-		var short []string
-		for _, c := range cs {
-			short = append(short, c[:7])
-		}
-		res.Notes = append(res.Notes, "коммиты этих патчей не тронуты: "+strings.Join(short, ", "))
-	}
-	printResult(env, l, res)
+	fmt.Fprintf(env.Out, "── откат --force: %d записей, до снимка %s\n", len(f.Entries), f.Backup)
+	printResult(env, l, f.Result)
 	return nil
 }
