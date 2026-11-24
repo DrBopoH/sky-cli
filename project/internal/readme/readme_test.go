@@ -7,11 +7,11 @@ import (
 
 func TestFiles(t *testing.T) {
 	files := Files([]Entry{{Usage: "sky one", Summary: "первая"}, {Usage: "sky two", Summary: "вторая"}}, []Entry{{Usage: "op", Summary: "делает"}}, "scope = [x/]\n")
-	if len(files) != 4 || files[0].Name != "readme.md" || files[1].Name != "git-versioning.md" || files[2].Name != "MT-unify-systems.md" || files[3].Name != "MT-fix-before-reset.md" {
+	if len(files) != 4 || files[0].Name != "readme.md" || files[1].Name != "MT-git-reglament.md" || files[2].Name != "MT-unify-systems.md" || files[3].Name != "MT-fix-before-reset.md" {
 		t.Fatalf("набор файлов: %v", files)
 	}
 	r := string(files[0].Content)
-	for _, want := range []string{"- `sky one` — первая", "- `sky two` — вторая", "- `op` — делает", "## Патчи", "## Операции", "scope = [x/]", "(git-versioning.md)", "Как вести clouds/"} {
+	for _, want := range []string{"- `sky one` — первая", "- `sky two` — вторая", "- `op` — делает", "## Патчи", "## Операции", "scope = [x/]", "(MT-git-reglament.md)", "Как вести clouds/"} {
 		if !strings.Contains(r, want) {
 			t.Errorf("в readme.md нет %q", want)
 		}

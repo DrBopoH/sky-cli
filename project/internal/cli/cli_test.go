@@ -45,7 +45,7 @@ func TestInitDefault(t *testing.T) {
 	if err != nil || len(c.Scope) != 1 || c.Scope[0] != "project/" {
 		t.Fatalf("sky.conf: %q %v", b, err)
 	}
-	for _, name := range []string{"readme.md", "git-versioning.md", "MT-unify-systems.md", "MT-fix-before-reset.md"} {
+	for _, name := range []string{"readme.md", "MT-git-reglament.md", "MT-unify-systems.md", "MT-fix-before-reset.md"} {
 		if fi, err := os.Stat(filepath.Join(l.Readme, name)); err != nil || fi.Mode().Perm() != 0o444 {
 			t.Fatalf("%s: %v %v", name, fi, err)
 		}
