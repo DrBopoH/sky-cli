@@ -3,7 +3,6 @@ package look
 
 import (
 	"fmt"
-	"github.com/DrBopoH/sky-cli/internal/gitx"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -12,6 +11,7 @@ import (
 
 	"github.com/DrBopoH/sky-cli/internal/apply"
 	"github.com/DrBopoH/sky-cli/internal/conf"
+	"github.com/DrBopoH/sky-cli/internal/gitx"
 )
 
 const (

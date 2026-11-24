@@ -3,13 +3,13 @@ package apply
 import (
 	"archive/zip"
 	"fmt"
-	"github.com/DrBopoH/sky-cli/internal/gitx"
 	"io"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 
+	"github.com/DrBopoH/sky-cli/internal/gitx"
 	"github.com/DrBopoH/sky-cli/internal/ops"
 )
 
@@ -190,32 +190,14 @@ func RunEffects(root, historyDir, dirName, source string, effects []ops.Effect) 
 	if err != nil {
 		return Result{}, err
 	}
-	stage, err := nextStageDir(historyDir, dirName)
+	rec, err := newRecord(historyDir, dirName, source, changes)
 	if err != nil {
 		return Result{}, err
 	}
-	fail := func(err error) (Result, error) {
-		os.RemoveAll(stage)
-		return Result{}, err
-	}
-	if err := saveBefore(stage, source, changes); err != nil {
-		return fail(err)
-	}
 	if err := execute(root, changes); err != nil {
-		if rerr := Restore(root, stage); rerr != nil {
-			return Result{Stage: stage}, fmt.Errorf("%w; откат не завершён, снимок в %s: %v", err, stage, rerr)
-		}
-		return fail(err)
+		return rec.rewind(root, err)
 	}
-	res := Result{Stage: stage}
-	for _, c := range changes {
-		mark := map[string]string{StCreated: "+", StModified: "~", StDeleted: "-"}[c.Status]
-		res.Lines = append(res.Lines, Line{mark, c.Path})
-	}
-	for _, p := range same {
-		res.Lines = append(res.Lines, Line{"=", p})
-	}
-	return res, nil
+	return Result{Stage: rec.stage, Lines: marks(changes, same)}, nil
 }
 
 // Last возвращает n последних записей (новые первыми).

@@ -2,12 +2,12 @@ package cli
 
 import (
 	"fmt"
-	"github.com/DrBopoH/sky-cli/internal/gitx"
 	"path/filepath"
 	"strings"
 
 	"github.com/DrBopoH/sky-cli/internal/apply"
 	"github.com/DrBopoH/sky-cli/internal/commit"
+	"github.com/DrBopoH/sky-cli/internal/gitx"
 	"github.com/DrBopoH/sky-cli/internal/repo"
 )
 

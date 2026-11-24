@@ -3,10 +3,11 @@ package apply
 import (
 	"errors"
 	"fmt"
-	"github.com/DrBopoH/sky-cli/internal/gitx"
 	"io"
 	"os"
 	"path/filepath"
+
+	"github.com/DrBopoH/sky-cli/internal/gitx"
 )
 
 type Line struct {
@@ -32,23 +33,13 @@ func Run(root, stagesDir, patchPath string) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
-	stage, err := nextStageDir(stagesDir, patchPath)
+	rec, err := newRecord(stagesDir, patchPath, patchPath, changes)
 	if err != nil {
 		return Result{}, err
 	}
-	res := Result{Stage: stage, Notes: plan.Notes}
-	fail := func(err error) (Result, error) {
-		os.RemoveAll(stage)
-		return Result{}, err
-	}
-	if err := saveBefore(stage, patchPath, changes); err != nil {
-		return fail(err)
-	}
+	res := Result{Stage: rec.stage, Notes: plan.Notes}
 	if err := execute(root, changes); err != nil {
-		if rerr := Restore(root, stage); rerr != nil {
-			return Result{Stage: stage}, fmt.Errorf("%w; откат не завершён, снимок в %s: %v", err, stage, rerr)
-		}
-		return fail(err)
+		return rec.rewind(root, err)
 	}
 	if plan.Commit != "" {
 		paths := make([]string, len(changes))
@@ -61,10 +52,7 @@ func Run(root, stagesDir, patchPath string) (Result, error) {
 			fresh, err := gitx.Untracked(root)
 			if err != nil {
 				gitx.Unstage(root, paths)
-				if rerr := Restore(root, stage); rerr != nil {
-					return Result{Stage: stage}, fmt.Errorf("%w; откат не завершён, снимок в %s: %v", err, stage, rerr)
-				}
-				return fail(err)
+				return rec.rewind(root, err)
 			}
 			var extra []string
 			for _, p := range fresh {
@@ -74,42 +62,27 @@ func Run(root, stagesDir, patchPath string) (Result, error) {
 				extra = append(extra, p)
 				res.Lines = append(res.Lines, Line{"+", p})
 			}
-			noteCreated(stage, extra)
+			noteCreated(rec.stage, extra)
 			paths = append(paths, extra...)
 		}
-		hash, skipped, err := commitPaths(root, plan.Commit, paths)
-		for _, p := range skipped {
-			res.Notes = append(res.Notes, p+": в .gitignore, в коммит не включён")
-		}
+		hash, notes, err := rec.commit(root, plan.Commit, paths)
+		res.Notes = append(res.Notes, notes...)
 		if err != nil {
-			gitx.Unstage(root, paths)
-			if rerr := Restore(root, stage); rerr != nil {
-				return Result{Stage: stage}, fmt.Errorf("%w; откат не завершён, снимок в %s: %v", err, stage, rerr)
-			}
-			return fail(err)
+			return rec.rewind(root, err)
 		}
 		switch {
 		case hash != "":
 			res.Commit = hash + " " + plan.Commit
-			if full, err := gitx.Run(root, "rev-parse", "HEAD"); err == nil {
-				noteCommit(stage, full)
-			}
 		case len(paths) == 0:
 			res.Notes = append(res.Notes, "файлы не изменились, коммит не создан")
 		default:
 			res.Notes = append(res.Notes, "в коммит нечего включать, коммит не создан")
 		}
 	}
-	if err := moveFile(patchPath, filepath.Join(stage, filepath.Base(patchPath))); err != nil {
+	if err := moveFile(patchPath, filepath.Join(rec.stage, filepath.Base(patchPath))); err != nil {
 		return res, fmt.Errorf("файлы записаны, но патч не перенесён в stages: %w", err)
 	}
-	for _, c := range changes {
-		mark := map[string]string{StCreated: "+", StModified: "~", StDeleted: "-"}[c.Status]
-		res.Lines = append(res.Lines, Line{mark, c.Path})
-	}
-	for _, p := range same {
-		res.Lines = append(res.Lines, Line{"=", p})
-	}
+	res.Lines = append(res.Lines, marks(changes, same)...)
 	PruneHistory(stagesDir)
 	return res, nil
 }

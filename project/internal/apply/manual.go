@@ -2,11 +2,11 @@ package apply
 
 import (
 	"fmt"
-	"github.com/DrBopoH/sky-cli/internal/gitx"
 	"os"
 	"path/filepath"
 
 	"github.com/DrBopoH/sky-cli/internal/commit"
+	"github.com/DrBopoH/sky-cli/internal/gitx"
 )
 
 // RunManual — ручные правки как запись history/: тот же снимок «до» (версии из HEAD), тот же коммит.
@@ -50,36 +50,18 @@ func RunManual(root, historyDir, msg string, opts commit.Options) (Result, error
 			changes = append(changes, change{Status: StModified, Path: p, Old: old, OldExe: exe})
 		}
 	}
-	stage, err := nextStageDir(historyDir, "commit")
+	rec, err := newRecord(historyDir, "commit", "commit", changes)
 	if err != nil {
 		return Result{}, err
 	}
-	fail := func(err error) (Result, error) {
-		os.RemoveAll(stage)
-		return Result{}, err
-	}
-	if err := saveBefore(stage, "commit", changes); err != nil {
-		return fail(err)
-	}
-	hash, skipped, err := commitPaths(root, msg, paths)
+	hash, cnotes, err := rec.commit(root, msg, paths)
 	if err != nil {
-		gitx.Unstage(root, paths)
-		return fail(err)
+		return Result{}, rec.drop(err)
 	}
 	if hash == "" {
-		return fail(fmt.Errorf("в коммит нечего включать (все изменения под .gitignore)"))
+		return Result{}, rec.drop(fmt.Errorf("в коммит нечего включать (все изменения под .gitignore)"))
 	}
-	if full, err := gitx.Run(root, "rev-parse", "HEAD"); err == nil {
-		noteCommit(stage, full)
-	}
-	res := Result{Stage: stage, Commit: hash + " " + msg, Notes: notes}
-	for _, p := range skipped {
-		res.Notes = append(res.Notes, p+": в .gitignore, в коммит не включён")
-	}
-	for _, c := range changes {
-		mark := map[string]string{StCreated: "+", StModified: "~", StDeleted: "-"}[c.Status]
-		res.Lines = append(res.Lines, Line{mark, c.Path})
-	}
+	res := Result{Stage: rec.stage, Commit: hash + " " + msg, Notes: append(notes, cnotes...), Lines: marks(changes, nil)}
 	PruneHistory(historyDir)
 	return res, nil
 }

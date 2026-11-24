@@ -5,7 +5,6 @@ import (
 	"archive/zip"
 	"bytes"
 	"fmt"
-	"github.com/DrBopoH/sky-cli/internal/gitx"
 	"io"
 	"os"
 	"path/filepath"
@@ -14,6 +13,7 @@ import (
 	"time"
 
 	"github.com/DrBopoH/sky-cli/internal/apply"
+	"github.com/DrBopoH/sky-cli/internal/gitx"
 	"github.com/DrBopoH/sky-cli/internal/look"
 )
 

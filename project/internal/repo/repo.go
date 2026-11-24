@@ -5,10 +5,11 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"github.com/DrBopoH/sky-cli/internal/gitx"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/DrBopoH/sky-cli/internal/gitx"
 )
 
 type Layout struct {

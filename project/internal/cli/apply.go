@@ -2,13 +2,13 @@ package cli
 
 import (
 	"fmt"
-	"github.com/DrBopoH/sky-cli/internal/gitx"
 	"os"
 	"path/filepath"
 	"sort"
 
 	"github.com/DrBopoH/sky-cli/internal/apply"
 	"github.com/DrBopoH/sky-cli/internal/conf"
+	"github.com/DrBopoH/sky-cli/internal/gitx"
 	"github.com/DrBopoH/sky-cli/internal/pack"
 	"github.com/DrBopoH/sky-cli/internal/repo"
 )
