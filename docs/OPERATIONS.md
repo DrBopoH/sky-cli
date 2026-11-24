@@ -95,5 +95,6 @@
 - `internal/commit` — общие правила коммита: сообщение, флаги и параметры использования; их берут оба интерфейса.
 - `internal/gitx` — единственная точка доступа к git: все запуски процесса `git` идут через неё.
 - `internal/work` — рабочие процессы ядра: применить патч с полным снимком «до», откат `--force`, проверка чистого дерева; консоль только печатает.
-- `internal/ops` — реестр, нотация (`Parse`), операции (`delete.go`, `commit.go`).
-- `internal/apply` — чтение архива, `GuardPath`, снимок «до», запись, `Restore`, коммит (`commit.go`), откат (`undo.go`); `record.go` — одна запись history, через неё идут патч, откат и ручной коммит.
+- `internal/notation` — общая запись данных: строка, поля через табуляцию (`Parse`, `ParseRange`); ею записаны файлы операций и manifest.txt.
+- `internal/apply` — ядро: `Effect`, `Plan`, `Planner`, `GuardPath`, `CheckEffects`, снимок «до», запись, `Restore`, коммит (`commit.go`), откат (`undo.go`); `record.go` — одна запись history. Ядро получает готовый `Plan` и ничего не знает о форме патча.
+- `internal/ops` — адаптер патча: читает zip в `Plan` (`Build`), реестр и операции (`delete.go`, `commit.go`). Зависит от `apply`, не наоборот; `cli.New()` подставляет `ops.Build`.
