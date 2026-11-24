@@ -16,6 +16,9 @@ var versioningText string
 //go:embed text/MT-unify-systems.md
 var unifyText string
 
+//go:embed text/MT-fix-before-reset.md
+var fixText string
+
 const (
 	commandsMarker   = "{{commands}}"
 	operationsMarker = "{{operations}}"
@@ -49,5 +52,6 @@ func Files(cmds, operations []Entry, confExample string) []File {
 		{Name: "readme.md", Content: []byte(r)},
 		{Name: "git-versioning.md", Content: []byte(versioningText)},
 		{Name: "MT-unify-systems.md", Content: []byte(unifyText)},
+		{Name: "MT-fix-before-reset.md", Content: []byte(fixText)},
 	}
 }
