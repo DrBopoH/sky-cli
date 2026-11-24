@@ -14,7 +14,7 @@ func rollbackCommand() Command {
 		Usage:     "sky rollback [list]",
 		Summary:   "откатить последнюю запись .sky/stages/ (применённый патч или откат): вернуть файлы «до», снять созданный патчем коммит, если он ещё вершина ветки; сам откат тоже запись, повторный sky rollback возвращает всё назад; list — показать записи",
 		NeedsInit: true,
-		Run:       runRollback,
+		Run:       withLook(runRollback, false),
 	}
 }
 

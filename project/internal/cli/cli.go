@@ -33,7 +33,7 @@ type App struct {
 }
 
 func New() *App {
-	return &App{Commands: []Command{initCommand(), applyCommand(), commitCommand(), rollbackCommand()}}
+	return &App{Commands: []Command{initCommand(), applyCommand(), commitCommand(), rollbackCommand(), lookCommand()}}
 }
 
 // Entries — команды для readme.md: реестр плюс встроенные help и version.

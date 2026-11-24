@@ -15,7 +15,7 @@ func commitCommand() Command {
 		Usage:     `sky commit [--new] "тип: текст"`,
 		Summary:   "закоммитить ручные правки одним коммитом: изменения отслеживаемых файлов; --new добавляет и новые файлы (кроме игнорируемых), без него sky их только перечислит; сообщение как у операции commit",
 		NeedsInit: true,
-		Run:       runCommit,
+		Run:       withLook(runCommit, false),
 	}
 }
 

@@ -540,3 +540,35 @@ func TestRollbackEmpty(t *testing.T) {
 		t.Errorf("list: %d %s", code, out)
 	}
 }
+
+func TestLookCommand(t *testing.T) {
+	dir := gitDir(t)
+	run(New(), dir, "init")
+	l := repo.At(dir)
+	if _, err := os.Stat(filepath.Join(l.Foryou, "status.md")); err != nil {
+		t.Fatal("init должен создавать foryou")
+	}
+	fi, _ := os.Stat(filepath.Join(l.Foryou, "status.md"))
+	if fi.Mode().Perm()&0o222 != 0 {
+		t.Errorf("foryou только для чтения: %v", fi.Mode())
+	}
+	os.WriteFile(filepath.Join(dir, "README.md"), []byte("правка\n"), 0o644)
+	if code, _, errs := run(New(), dir, "commit", "docs: edit"); code != 0 {
+		t.Fatal(errs)
+	}
+	h, _ := os.ReadFile(filepath.Join(l.Foryou, "history.md"))
+	if !strings.Contains(string(h), "docs: edit") {
+		t.Errorf("commit должен обновлять foryou:\n%s", h)
+	}
+	os.WriteFile(filepath.Join(l.Foryou, "junk.md"), nil, 0o644)
+	code, out, _ := run(New(), dir, "look")
+	if code != 0 || !strings.Contains(out, "status.md") {
+		t.Fatalf("%d %s", code, out)
+	}
+	if _, err := os.Stat(filepath.Join(l.Foryou, "junk.md")); err == nil {
+		t.Error("посторонний файл в foryou должен быть убран")
+	}
+	if code, _, _ := run(New(), dir, "look", "x"); code != 1 {
+		t.Error("аргументы не принимаются")
+	}
+}

@@ -241,3 +241,36 @@ func (l Layout) FirstCommit(msg string, files []string) error {
 	}
 	return run("switch", "-q", "-c", "dev")
 }
+
+// SyncForyou приводит .sky/foryou/ к переданному набору: пишет файлы только для чтения, лишнее убирает.
+func (l Layout) SyncForyou(files []Generated) ([]Change, error) {
+	if err := l.MkDirs(); err != nil {
+		return nil, err
+	}
+	var out []Change
+	want := map[string]bool{}
+	for _, f := range files {
+		want[f.Name] = true
+		p := filepath.Join(l.Foryou, f.Name)
+		st, err := writeReadOnly(p, l.Foryou, f.Content)
+		if err != nil {
+			return out, err
+		}
+		out = append(out, Change{l.rel(p), st})
+	}
+	entries, err := os.ReadDir(l.Foryou)
+	if err != nil {
+		return out, err
+	}
+	for _, e := range entries {
+		if want[e.Name()] {
+			continue
+		}
+		p := filepath.Join(l.Foryou, e.Name())
+		if err := os.RemoveAll(p); err != nil {
+			return out, err
+		}
+		out = append(out, Change{l.rel(p), Removed})
+	}
+	return out, nil
+}

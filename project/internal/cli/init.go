@@ -23,7 +23,7 @@ func initCommand() Command {
 		Usage:   "sky init [пути…]",
 		Summary: "завести проект: git-репозиторий (если его нет), первый коммит в main и ветку dev (в новом репозитории), папки scope (по умолчанию project/), README.md, .gitignore и LICENSE по [license] (если их нет), .sky/; напр. sky init backend/ frontend/",
 		Help:    initHelp,
-		Run:     runInit,
+		Run:     withLook(runInit, false),
 	}
 }
 

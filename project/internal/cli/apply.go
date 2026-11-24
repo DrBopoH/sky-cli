@@ -19,7 +19,7 @@ func applyCommand() Command {
 		Usage:     "sky apply [--force]",
 		Summary:   "применить все patch*.zip из inbox от старых к новым: проверить, сохранить «до» в .sky/stages/, выполнить операции, записать файлы, перенести патч в stages",
 		NeedsInit: true,
-		Run:       runApply,
+		Run:       withLook(runApply, true),
 	}
 }
 
