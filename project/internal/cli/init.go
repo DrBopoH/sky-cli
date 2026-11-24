@@ -17,7 +17,7 @@ func initCommand() Command {
 	return Command{
 		Name:    "init",
 		Usage:   "sky init [пути…]",
-		Summary: "завести проект один раз: git-репозиторий (если его нет), .sky/ с sky.conf, папки scope (по умолчанию project/), строка .sky/ в .gitignore, первый коммит в main и ветка dev (в репозитории без коммитов); повторный запуск отказывает; напр. sky init backend/ frontend/",
+		Summary: summaryInit,
 		Help:    initHelp,
 		Run:     withLook(runInit, false),
 	}

@@ -15,7 +15,7 @@ func applyCommand() Command {
 	return Command{
 		Name:      "apply",
 		Usage:     "sky apply [--force]",
-		Summary:   "применить все patch*.zip из inbox от старых к новым: проверить, снять полный снимок проекта в .sky/stages/backups/ и «до» изменённых файлов в .sky/stages/history/, выполнить операции, записать файлы, перенести патч в history",
+		Summary:   summaryApply,
 		NeedsInit: true,
 		Run:       withLook(runApply, true),
 	}

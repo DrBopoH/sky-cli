@@ -15,7 +15,7 @@ func lookCommand() Command {
 	return Command{
 		Name:      "look",
 		Usage:     "sky look",
-		Summary:   "обновить .sky/foryou/: факты о репозитории (состояние, ветки, история по 128 коммитов на ветку, дерево файлов и граф веток до 1024 строк, записи stages); те же файлы обновляются в конце init, apply, commit и rollback",
+		Summary:   summaryLook,
 		NeedsInit: true,
 		Run: func(a *App, env Env, args []string) error {
 			if len(args) != 0 {

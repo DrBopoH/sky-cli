@@ -14,7 +14,7 @@ func commitCommand() Command {
 	return Command{
 		Name:      "commit",
 		Usage:     `sky commit [--new] "тип: текст"`,
-		Summary:   "закоммитить ручные правки одним коммитом и записать его в .sky/stages/history/ как патч (откатывается тем же sky rollback): изменения отслеживаемых файлов; --new добавляет и новые файлы (кроме игнорируемых), без него sky их только перечислит; сообщение как у операции commit",
+		Summary:   summaryCommit,
 		NeedsInit: true,
 		Run:       withLook(runCommit, false),
 	}

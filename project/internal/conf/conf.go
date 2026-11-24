@@ -2,6 +2,7 @@
 package conf
 
 import (
+	_ "embed"
 	"fmt"
 	"os"
 	"path"
@@ -24,13 +25,8 @@ func Default() Conf {
 	return Conf{Scope: []string{DefaultScope}, Inbox: DefaultInbox}
 }
 
-const header = `# sky.conf — пути проекта.
-# scope — папки проекта от корня репозитория; sky применяет патчи, снимает «до» и коммитит только в них.
-#   бинарь, одна папка:  scope = [project/]
-#   веб:                 scope = [backend/, frontend/]
-# inbox — папка, куда приходят patch*.zip.
-# regulation — необязательная ссылка (URL) на регламент версий; sky её только хранит и не загружает.
-`
+//go:embed text/header.txt
+var header string
 
 func Render(c Conf) string {
 	reg := "# regulation = https://"

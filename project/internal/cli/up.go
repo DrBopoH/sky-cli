@@ -15,7 +15,7 @@ func upCommand() Command {
 	return Command{
 		Name:      "up",
 		Usage:     "sky up",
-		Summary:   "упаковать проект для чата: файлы по версии git, .sky/clouds, sky.conf, readme/ и foryou/ (файлы больше 5 МБ пропускаются, что вошло и что нет — в foryou/archive.md); архив — транзит: лежит во временной папке системы под одним именем, перезаписывается при каждом вызове, в backups/ и history/ не попадает; файл копируется в буфер обмена для вставки в чат",
+		Summary:   summaryUp,
 		NeedsInit: true,
 		Run:       withLook(runUp, false),
 	}

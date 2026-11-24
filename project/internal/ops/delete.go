@@ -9,7 +9,7 @@ import (
 var deleteOp = Operation{
 	Name:   "delete",
 	Fields: 1,
-	Doc:    "поле: `путь`. Удаляет файл. Папки и маски не поддерживаются.",
+	Doc:    docDelete,
 	Plan:   planDelete,
 }
 

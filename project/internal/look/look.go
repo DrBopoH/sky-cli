@@ -74,7 +74,7 @@ func orNone(ss []string, f func(string) string) string {
 
 func status(in Input, head, snap string) string {
 	var b strings.Builder
-	b.WriteString("Состояние рабочего дерева: ветка, HEAD, незакоммиченное, remote, патчи в inbox, последняя запись history. Читай первым.\n" + snap + "\n\n")
+	b.WriteString(preState + "\n" + snap + "\n\n")
 	branch := gitx.Try(in.Root, "branch", "--show-current")
 	if branch == "" {
 		branch = "(нет текущей ветки)"
@@ -130,7 +130,7 @@ func status(in Input, head, snap string) string {
 
 func branches(in Input, snap string) string {
 	var b strings.Builder
-	b.WriteString("Ветки репозитория: локальные и удалённые, вершина и тема последнего коммита. Читай, когда нужно знать, какие ветки есть.\n" + snap + "\n\n")
+	b.WriteString(preBranches + "\n" + snap + "\n\n")
 	cur := gitx.Try(in.Root, "branch", "--show-current")
 	section := func(title, ref string) {
 		rows := lines(gitx.Try(in.Root, "for-each-ref", "--format=%(refname:short)\t%(objectname:short=7)\t%(contents:subject)", ref))
@@ -156,7 +156,7 @@ func branches(in Input, snap string) string {
 
 func history(in Input, snap string) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "История коммитов: до %d последних на каждую ветку, новые сверху, формат «хэш тема». Читай, когда нужна история.\n%s\n", MaxBranchCommits, snap)
+	fmt.Fprintf(&b, preHistory+"\n%s\n", MaxBranchCommits, snap)
 	refs := lines(gitx.Try(in.Root, "for-each-ref", "--format=%(refname)", "refs/heads", "refs/remotes"))
 	if len(refs) == 0 {
 		b.WriteString("\nкоммитов нет\n")
@@ -210,7 +210,7 @@ func capped(b *strings.Builder, rows []string) {
 
 func tree(in Input, snap string) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "Файлы репозитория деревом: отслеживаемые и новые, без игнорируемых; не больше %d строк. Читай, когда нужно найти файл.\n%s\n\n", MaxTreeLines, snap)
+	fmt.Fprintf(&b, preFiles+"\n%s\n\n", MaxTreeLines, snap)
 	var rows []string
 	var prev []string
 	for _, p := range paths(in) {
@@ -236,7 +236,7 @@ func tree(in Input, snap string) string {
 
 func graph(in Input, snap string) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "Дерево веток: граф коммитов всех веток с указателями (HEAD, ветки, remote, теги), новые сверху; не больше %d строк. Читай, когда нужно понять, как ветки расходятся и сливаются.\n%s\n\n", MaxTreeLines, snap)
+	fmt.Fprintf(&b, preTree+"\n%s\n\n", MaxTreeLines, snap)
 	g := gitx.Try(in.Root, "log", "--graph", "--all", "--date-order", "--decorate=short", "--format=%h%d %s", "-n", fmt.Sprint(MaxTreeLines))
 	if g == "" {
 		b.WriteString("коммитов нет\n")
@@ -257,7 +257,7 @@ func graph(in Input, snap string) string {
 
 func stages(in Input, snap string) string {
 	var b strings.Builder
-	b.WriteString("Записи .sky/stages/history/: применённые патчи и откаты, от старых к новым. Читай, когда нужно знать, что уже применялось.\n" + snap + "\n\n")
+	b.WriteString(preStages + "\n" + snap + "\n\n")
 	es, _ := apply.Entries(in.Stages)
 	if len(es) == 0 {
 		b.WriteString("записей нет\n")

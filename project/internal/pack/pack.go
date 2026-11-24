@@ -4,6 +4,7 @@ package pack
 import (
 	"archive/zip"
 	"bytes"
+	_ "embed"
 	"fmt"
 	"io"
 	"os"
@@ -16,6 +17,11 @@ import (
 	"github.com/DrBopoH/sky-cli/internal/gitx"
 	"github.com/DrBopoH/sky-cli/internal/look"
 )
+
+//go:embed text/archive.txt
+var preArchiveRaw string
+
+var preArchive = strings.TrimSpace(preArchiveRaw)
 
 const (
 	MaxFile   = 5 << 20  // больше — файл в архив не кладётся
@@ -257,7 +263,7 @@ func markdown(o Options, r Report, head string) string {
 	if o.Kind == Before {
 		what = "снимка перед патчем"
 	}
-	fmt.Fprintf(&b, "Содержимое %s: сколько файлов вошло и что пропущено. Читай, когда не находишь файл в проекте.\n", what)
+	fmt.Fprintf(&b, preArchive+"\n", what)
 	if head != "" {
 		fmt.Fprintf(&b, "Снимок при HEAD %s.\n", head)
 	} else {
