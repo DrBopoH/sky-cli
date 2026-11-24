@@ -13,6 +13,9 @@ var readmeText string
 //go:embed text/git-versioning.md
 var versioningText string
 
+//go:embed text/MT-unify-systems.md
+var unifyText string
+
 const (
 	commandsMarker   = "{{commands}}"
 	operationsMarker = "{{operations}}"
@@ -45,5 +48,6 @@ func Files(cmds, operations []Entry, confExample string) []File {
 	return []File{
 		{Name: "readme.md", Content: []byte(r)},
 		{Name: "git-versioning.md", Content: []byte(versioningText)},
+		{Name: "MT-unify-systems.md", Content: []byte(unifyText)},
 	}
 }

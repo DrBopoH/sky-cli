@@ -7,7 +7,7 @@ import (
 
 func TestFiles(t *testing.T) {
 	files := Files([]Entry{{Usage: "sky one", Summary: "первая"}, {Usage: "sky two", Summary: "вторая"}}, []Entry{{Usage: "op", Summary: "делает"}}, "scope = [x/]\n")
-	if len(files) != 2 || files[0].Name != "readme.md" || files[1].Name != "git-versioning.md" {
+	if len(files) != 3 || files[0].Name != "readme.md" || files[1].Name != "git-versioning.md" || files[2].Name != "MT-unify-systems.md" {
 		t.Fatalf("набор файлов: %v", files)
 	}
 	r := string(files[0].Content)
