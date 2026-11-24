@@ -46,15 +46,6 @@ var registry = []Operation{deleteOp, commitOp}
 
 func All() []Operation { return append([]Operation(nil), registry...) }
 
-func Lookup(name string) (Operation, bool) {
-	for _, o := range registry {
-		if o.Name == name {
-			return o, true
-		}
-	}
-	return Operation{}, false
-}
-
 // Parse — общая нотация: одна запись на строку, поля через табуляцию, пустые строки и «#…» пропускаются.
 func Parse(src string, fields int) ([][]string, error) { return ParseRange(src, fields, fields) }
 

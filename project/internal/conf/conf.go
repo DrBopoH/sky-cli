@@ -1,4 +1,4 @@
-// Package conf — формат .sky/sky.conf: строки «ключ = значение», списки в [a, b], секции [папка] с командами, комментарии с «#».
+// Package conf — формат .sky/sky.conf: строки «ключ = значение», списки в [a, b], комментарии с «#».
 package conf
 
 import (
@@ -14,44 +14,22 @@ const (
 	DefaultInbox = "~/Downloads"
 )
 
-// Commands — команды папки scope; пустая строка — не задана.
-type Commands struct {
-	Test  string
-	Build string
-}
-
-// Get возвращает команду по имени («test», «build»).
-func (c Commands) Get(kind string) string {
-	switch kind {
-	case "test":
-		return c.Test
-	case "build":
-		return c.Build
-	}
-	return ""
-}
-
 type Conf struct {
-	Scope      []string            // папки проекта от корня репозитория
-	Inbox      string              // откуда sky забирает patch*.zip
-	Regulation string              // необязательная ссылка на регламент; sky её не загружает
-	Cmd        map[string]Commands // команды по папкам scope
+	Scope      []string // папки проекта от корня репозитория
+	Inbox      string   // откуда sky забирает patch*.zip
+	Regulation string   // необязательная ссылка на регламент; sky её не загружает
 }
 
 func Default() Conf {
 	return Conf{Scope: []string{DefaultScope}, Inbox: DefaultInbox}
 }
 
-const header = `# sky.conf — пути и команды проекта.
+const header = `# sky.conf — пути проекта.
 # scope — папки проекта от корня репозитория; sky применяет патчи, снимает «до» и коммитит только в них.
 #   бинарь, одна папка:  scope = [project/]
 #   веб:                 scope = [backend/, frontend/]
 # inbox — папка, куда приходят patch*.zip.
 # regulation — необязательная ссылка (URL) на регламент версий; sky её только хранит и не загружает.
-# Секция [папка/] задаёт команды test и build этой папки (их запускает команда сборки sky); папка должна входить в scope:
-#   [project/]
-#   test = go test ./...
-#   build = go build -o bin/app .
 `
 
 func Render(c Conf) string {
@@ -61,26 +39,12 @@ func Render(c Conf) string {
 	}
 	var b strings.Builder
 	fmt.Fprintf(&b, "%s\nscope = [%s]\ninbox = %s\n%s\n", header, strings.Join(c.Scope, ", "), c.Inbox, reg)
-	for _, s := range c.Scope {
-		cmd := c.Cmd[s]
-		if cmd.Test == "" && cmd.Build == "" {
-			continue
-		}
-		fmt.Fprintf(&b, "\n[%s]\n", s)
-		if cmd.Test != "" {
-			fmt.Fprintf(&b, "test = %s\n", cmd.Test)
-		}
-		if cmd.Build != "" {
-			fmt.Fprintf(&b, "build = %s\n", cmd.Build)
-		}
-	}
 	return b.String()
 }
 
 // Parse читает sky.conf; пропущенные ключи берутся по умолчанию, неизвестные — ошибка.
 func Parse(src string) (Conf, error) {
 	c := Default()
-	section := ""
 	for i, line := range strings.Split(src, "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" || strings.HasPrefix(line, "#") {
@@ -88,44 +52,13 @@ func Parse(src string) (Conf, error) {
 		}
 		at := func(err error) error { return fmt.Errorf("sky.conf:%d: %w", i+1, err) }
 		if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
-			name := strings.TrimSpace(line[1 : len(line)-1])
-			if strings.ContainsAny(name, ", \t") {
-				return c, at(fmt.Errorf("секция — одна папка, а не список"))
-			}
-			if !strings.HasSuffix(name, "/") {
-				return c, at(fmt.Errorf("секция папки пишется со слэшем: [%s/] (секции без слэша зарезервированы)", name))
-			}
-			p, err := normPath(name)
-			if err != nil {
-				return c, at(err)
-			}
-			section = p
-			continue
+			return c, at(fmt.Errorf("секций в sky.conf нет"))
 		}
 		key, val, ok := strings.Cut(line, "=")
 		if !ok {
 			return c, at(fmt.Errorf("нужен формат «ключ = значение»"))
 		}
 		key, val = strings.TrimSpace(key), strings.TrimSpace(val)
-		if section != "" {
-			cmd := c.Cmd[section]
-			switch key {
-			case "test":
-				cmd.Test = val
-			case "build":
-				cmd.Build = val
-			default:
-				return c, at(fmt.Errorf("в секции [%s] есть только test и build, а не «%s»", section, key))
-			}
-			if val == "" {
-				return c, at(fmt.Errorf("%s пуст", key))
-			}
-			if c.Cmd == nil {
-				c.Cmd = map[string]Commands{}
-			}
-			c.Cmd[section] = cmd
-			continue
-		}
 		switch key {
 		case "scope":
 			s, err := ParseScope([]string{val})
@@ -147,21 +80,7 @@ func Parse(src string) (Conf, error) {
 			return c, at(fmt.Errorf("неизвестный ключ «%s»", key))
 		}
 	}
-	for s := range c.Cmd {
-		if !c.InScope(s) {
-			return c, fmt.Errorf("sky.conf: секция [%s] — такой папки нет в scope", s)
-		}
-	}
 	return c, nil
-}
-
-func (c Conf) InScope(p string) bool {
-	for _, s := range c.Scope {
-		if s == p {
-			return true
-		}
-	}
-	return false
 }
 
 // ParseScope принимает «a/ b/», «a/,b/» и «[a/, b/]» (в любой комбинации) и возвращает нормализованный список.

@@ -45,7 +45,7 @@ func TestParse(t *testing.T) {
 }
 
 func TestDeletePlan(t *testing.T) {
-	op, ok := Lookup("delete")
+	op, ok := lookup("delete")
 	if !ok || op.Fields != 1 || op.Doc == "" {
 		t.Fatal("реестр")
 	}
@@ -66,8 +66,17 @@ func TestDeletePlan(t *testing.T) {
 	}
 }
 
+func lookup(name string) (Operation, bool) {
+	for _, o := range All() {
+		if o.Name == name {
+			return o, true
+		}
+	}
+	return Operation{}, false
+}
+
 func TestLookupUnknown(t *testing.T) {
-	if _, ok := Lookup("rm-rf"); ok {
+	if _, ok := lookup("rm-rf"); ok {
 		t.Fatal("неизвестной операции быть не должно")
 	}
 	if len(All()) == 0 {
@@ -76,7 +85,7 @@ func TestLookupUnknown(t *testing.T) {
 }
 
 func TestCommitOp(t *testing.T) {
-	op, ok := Lookup("commit")
+	op, ok := lookup("commit")
 	if !ok {
 		t.Fatal("операции commit нет в реестре")
 	}
