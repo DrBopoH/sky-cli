@@ -30,7 +30,7 @@ func run(a *App, dir string, args ...string) (int, string, string) {
 
 func TestInitDefault(t *testing.T) {
 	dir := gitDir(t)
-	code, out, errs := run(New(), dir, "init")
+	code, out, errs := run(newApp(), dir, "init")
 	if code != 0 {
 		t.Fatalf("%d %s", code, errs)
 	}
@@ -78,7 +78,7 @@ func TestInitScopeForms(t *testing.T) {
 		{"init", "[backend/, frontend/]"},
 	} {
 		dir := gitDir(t)
-		if code, _, errs := run(New(), dir, args...); code != 0 {
+		if code, _, errs := run(newApp(), dir, args...); code != 0 {
 			t.Fatalf("%v: %s", args, errs)
 		}
 		b, _ := os.ReadFile(repo.At(dir).Conf)
@@ -91,15 +91,15 @@ func TestInitScopeForms(t *testing.T) {
 
 func TestInitRunsOnce(t *testing.T) {
 	dir := gitDir(t)
-	run(New(), dir, "init", "backend/", "frontend/")
+	run(newApp(), dir, "init", "backend/", "frontend/")
 	l := repo.At(dir)
 	custom := "scope = [backend/, frontend/]\ninbox = /tmp/in\n"
 	os.WriteFile(l.Conf, []byte(custom), 0o644)
-	code, _, errs := run(New(), dir, "init")
+	code, _, errs := run(newApp(), dir, "init")
 	if code != 1 || !strings.Contains(errs, "уже инициализирован") {
 		t.Fatalf("%d %s", code, errs)
 	}
-	if code, _, _ := run(New(), dir, "init", "app/"); code != 1 {
+	if code, _, _ := run(newApp(), dir, "init", "app/"); code != 1 {
 		t.Error("с путями тоже отказ")
 	}
 	if b, _ := os.ReadFile(l.Conf); string(b) != custom {
@@ -109,7 +109,7 @@ func TestInitRunsOnce(t *testing.T) {
 
 func TestInitCreatesGitRepoOutsideGit(t *testing.T) {
 	dir := t.TempDir()
-	code, out, errs := run(New(), dir, "init")
+	code, out, errs := run(newApp(), dir, "init")
 	if code != 0 {
 		t.Fatalf("%d %s", code, errs)
 	}
@@ -123,7 +123,7 @@ func TestInitCreatesGitRepoOutsideGit(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(dir, ".sky", "sky.conf")); err != nil {
 		t.Error("нет .sky/sky.conf")
 	}
-	if code, out, _ := run(New(), dir, "init"); code != 1 || strings.Contains(out, "git init") {
+	if code, out, _ := run(newApp(), dir, "init"); code != 1 || strings.Contains(out, "git init") {
 		t.Errorf("повторный init отказывает и ничего не создаёт: %s", out)
 	}
 }
@@ -132,7 +132,7 @@ func TestInitKeepsExistingFiles(t *testing.T) {
 	dir := gitDir(t)
 	os.WriteFile(filepath.Join(dir, "README.md"), []byte("мой ридми"), 0o644)
 	os.WriteFile(filepath.Join(dir, ".gitignore"), []byte("bin"), 0o644)
-	if code, _, errs := run(New(), dir, "init"); code != 0 {
+	if code, _, errs := run(newApp(), dir, "init"); code != 0 {
 		t.Fatal(errs)
 	}
 	if b, _ := os.ReadFile(filepath.Join(dir, "README.md")); string(b) != "мой ридми" {
@@ -148,7 +148,7 @@ func TestInitKeepsExistingFiles(t *testing.T) {
 
 func TestInitCreatesScopeDirs(t *testing.T) {
 	dir := gitDir(t)
-	run(New(), dir, "init", "backend/", "frontend/")
+	run(newApp(), dir, "init", "backend/", "frontend/")
 	for _, d := range []string{"backend", "frontend"} {
 		if st, err := os.Stat(filepath.Join(dir, d)); err != nil || !st.IsDir() {
 			t.Errorf("папка %s не создана", d)
@@ -158,20 +158,20 @@ func TestInitCreatesScopeDirs(t *testing.T) {
 		t.Error("project/ не должна создаваться при явном scope")
 	}
 	dir2 := gitDir(t)
-	if code, _, errs := run(New(), dir2, "init", "./"); code != 0 {
+	if code, _, errs := run(newApp(), dir2, "init", "./"); code != 0 {
 		t.Fatal(errs)
 	}
 }
 
 func TestInitErrors(t *testing.T) {
-	if code, _, _ := run(New(), gitDir(t), "init", "../x"); code != 1 {
+	if code, _, _ := run(newApp(), gitDir(t), "init", "../x"); code != 1 {
 		t.Fatal("scope вне репозитория должен падать")
 	}
 }
 
 func TestReadmeStructure(t *testing.T) {
 	dir := gitDir(t)
-	run(New(), dir, "init")
+	run(newApp(), dir, "init")
 	l := repo.At(dir)
 	b, _ := os.ReadFile(filepath.Join(l.Readme, "readme.md"))
 	readme := string(b)
@@ -192,7 +192,7 @@ func TestReadmeStructure(t *testing.T) {
 }
 
 func TestNeedsInitHookHealsAndRequiresInit(t *testing.T) {
-	a := New()
+	a := newApp()
 	called := 0
 	a.Commands = append(a.Commands, Command{Name: "probe", Usage: "sky probe", Summary: "тест", NeedsInit: true,
 		Run: func(*App, Env, []string) error { called++; return nil }})
@@ -214,7 +214,7 @@ func TestNeedsInitHookHealsAndRequiresInit(t *testing.T) {
 }
 
 func TestHelpVersionUnknown(t *testing.T) {
-	a := New()
+	a := newApp()
 	if code, out, _ := run(a, t.TempDir(), "help"); code != 0 || !strings.Contains(out, "sky init") {
 		t.Fatal(out)
 	}
@@ -241,7 +241,7 @@ func git(t *testing.T, dir string, args ...string) string {
 // initWithFiles — init и затем README.md и .gitignore (*.db), закоммиченные автором: init сам эти файлы не создаёт.
 func initWithFiles(t *testing.T, dir string) {
 	t.Helper()
-	if code, _, errs := run(New(), dir, "init"); code != 0 {
+	if code, _, errs := run(newApp(), dir, "init"); code != 0 {
 		t.Fatal(errs)
 	}
 	os.WriteFile(filepath.Join(dir, "README.md"), []byte("# t\n"), 0o644)
@@ -254,7 +254,7 @@ func initWithFiles(t *testing.T, dir string) {
 
 func TestInitFirstCommitAndDev(t *testing.T) {
 	dir := t.TempDir()
-	if code, out, errs := run(New(), dir, "init"); code != 0 {
+	if code, out, errs := run(newApp(), dir, "init"); code != 0 {
 		t.Fatalf("%d %s %s", code, out, errs)
 	}
 	if b := git(t, dir, "branch", "--show-current"); b != "dev" {
@@ -285,7 +285,7 @@ func TestInitLeavesExistingHistoryAlone(t *testing.T) {
 	git(t, dir, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "old")
 	before := git(t, dir, "rev-parse", "HEAD")
 	branch := git(t, dir, "branch", "--show-current")
-	run(New(), dir, "init")
+	run(newApp(), dir, "init")
 	if git(t, dir, "rev-parse", "HEAD") != before || git(t, dir, "branch", "--show-current") != branch {
 		t.Error("init не должен трогать репозиторий с историей")
 	}
@@ -296,7 +296,7 @@ func TestInitLeavesExistingHistoryAlone(t *testing.T) {
 
 func TestInitHelp(t *testing.T) {
 	for _, args := range [][]string{{"init", "--help"}, {"init", "-h"}, {"help", "init"}} {
-		code, out, errs := run(New(), t.TempDir(), args...)
+		code, out, errs := run(newApp(), t.TempDir(), args...)
 		if code != 0 || errs != "" {
 			t.Fatalf("%v: %d %s", args, code, errs)
 		}
@@ -310,7 +310,7 @@ func TestInitHelp(t *testing.T) {
 
 func TestInitHelpDoesNotInit(t *testing.T) {
 	dir := t.TempDir()
-	run(New(), dir, "init", "--help")
+	run(newApp(), dir, "init", "--help")
 	if _, err := os.Stat(filepath.Join(dir, ".git")); err == nil {
 		t.Error("--help не должен создавать репозиторий")
 	}
@@ -320,10 +320,10 @@ func TestInitHelpDoesNotInit(t *testing.T) {
 }
 
 func TestHelpUnknownAndPlain(t *testing.T) {
-	if code, _, _ := run(New(), t.TempDir(), "help", "nope"); code != 2 {
+	if code, _, _ := run(newApp(), t.TempDir(), "help", "nope"); code != 2 {
 		t.Errorf("help nope: %d", code)
 	}
-	if code, out, _ := run(New(), t.TempDir(), "apply", "--help"); code != 0 || !strings.Contains(out, "sky apply") {
+	if code, out, _ := run(newApp(), t.TempDir(), "apply", "--help"); code != 0 || !strings.Contains(out, "sky apply") {
 		t.Errorf("apply --help: %d %s", code, out)
 	}
 }
@@ -343,7 +343,7 @@ func TestCommitCommand(t *testing.T) {
 	os.WriteFile(filepath.Join(dir, "new.txt"), []byte("новый\n"), 0o644)
 	os.WriteFile(filepath.Join(dir, "ignored.db"), []byte("x"), 0o644)
 
-	code, out, errs := run(New(), dir, "commit", "docs: edit readme")
+	code, out, errs := run(newApp(), dir, "commit", "docs: edit readme")
 	if code != 0 {
 		t.Fatalf("%d %s %s", code, out, errs)
 	}
@@ -353,7 +353,7 @@ func TestCommitCommand(t *testing.T) {
 	if files := git(t, dir, "show", "--name-only", "--format=", "HEAD"); files != "README.md" {
 		t.Errorf("в коммите: %q", files)
 	}
-	if code, _, errs := run(New(), dir, "commit", "docs: again"); code != 1 || !strings.Contains(errs, "нечего") {
+	if code, _, errs := run(newApp(), dir, "commit", "docs: again"); code != 1 || !strings.Contains(errs, "нечего") {
 		t.Errorf("повторно: %d %s", code, errs)
 	}
 }
@@ -363,7 +363,7 @@ func TestCommitCommandArgs(t *testing.T) {
 	initWithFiles(t, dir)
 	os.WriteFile(filepath.Join(dir, "README.md"), []byte("правка\n"), 0o644)
 	for _, args := range [][]string{{"commit"}, {"commit", "feat:", "two"}, {"commit", "no type"}, {"commit", "feat: " + strings.Repeat("x", 73)}} {
-		if code, _, _ := run(New(), dir, args...); code != 1 {
+		if code, _, _ := run(newApp(), dir, args...); code != 1 {
 			t.Errorf("%v: ждали отказ", args)
 		}
 	}
@@ -374,7 +374,7 @@ func TestCommitCommandArgs(t *testing.T) {
 
 func TestCommitNeedsInit(t *testing.T) {
 	dir := gitDir(t)
-	if code, _, errs := run(New(), dir, "commit", "fix: x"); code != 1 || !strings.Contains(errs, "sky init") {
+	if code, _, errs := run(newApp(), dir, "commit", "fix: x"); code != 1 || !strings.Contains(errs, "sky init") {
 		t.Errorf("%d %s", code, errs)
 	}
 }
@@ -385,11 +385,11 @@ func TestCommitNewFlag(t *testing.T) {
 	os.WriteFile(filepath.Join(dir, "new.txt"), []byte("новый\n"), 0o644)
 	os.WriteFile(filepath.Join(dir, "x.db"), []byte("x"), 0o644) // в .gitignore из шаблона
 
-	if code, _, errs := run(New(), dir, "commit", "feat: add new"); code != 1 || !strings.Contains(errs, "--new") {
+	if code, _, errs := run(newApp(), dir, "commit", "feat: add new"); code != 1 || !strings.Contains(errs, "--new") {
 		t.Fatalf("без --new при одних новых файлах: %d %s", code, errs)
 	}
 	for _, args := range [][]string{{"commit", "--new", "feat: add new"}} {
-		code, out, errs := run(New(), dir, args...)
+		code, out, errs := run(newApp(), dir, args...)
 		if code != 0 || strings.Contains(out, "не включены") {
 			t.Fatalf("%d %s %s", code, out, errs)
 		}
@@ -399,7 +399,7 @@ func TestCommitNewFlag(t *testing.T) {
 	}
 	// флаг можно ставить после сообщения
 	os.WriteFile(filepath.Join(dir, "n2.txt"), []byte("2\n"), 0o644)
-	if code, _, errs := run(New(), dir, "commit", "feat: add n2", "--new"); code != 0 {
+	if code, _, errs := run(newApp(), dir, "commit", "feat: add n2", "--new"); code != 0 {
 		t.Fatalf("%d %s", code, errs)
 	}
 	if st := git(t, dir, "status", "--porcelain"); st != "" {
@@ -412,14 +412,14 @@ func TestRollbackCommand(t *testing.T) {
 	zipPatch(t, filepath.Join(inbox, "patch-1.zip"), map[string]string{
 		"project/a.txt": "a\n", ".sky/operation/commit": "feat: add a\n",
 	})
-	if code, out, errs := run(New(), dir, "apply"); code != 0 {
+	if code, out, errs := run(newApp(), dir, "apply"); code != 0 {
 		t.Fatalf("%d %s %s", code, out, errs)
 	}
-	code, out, _ := run(New(), dir, "rollback", "list")
+	code, out, _ := run(newApp(), dir, "rollback", "list")
 	if code != 0 || !strings.Contains(out, "0001  patch-1.zip  файлов: 1  коммит ") {
 		t.Fatalf("list: %d %s", code, out)
 	}
-	code, out, errs := run(New(), dir, "rollback")
+	code, out, errs := run(newApp(), dir, "rollback")
 	if code != 0 || !strings.Contains(out, "- project/a.txt") || !strings.Contains(out, "снят") {
 		t.Fatalf("rollback: %d %s %s", code, out, errs)
 	}
@@ -429,7 +429,7 @@ func TestRollbackCommand(t *testing.T) {
 	if n := git(t, dir, "rev-list", "--count", "HEAD"); n != "1" {
 		t.Errorf("коммитов: %s", n)
 	}
-	if code, _, _ := run(New(), dir, "rollback", "x"); code != 1 {
+	if code, _, _ := run(newApp(), dir, "rollback", "x"); code != 1 {
 		t.Error("неизвестный аргумент")
 	}
 }
@@ -442,11 +442,11 @@ func TestRollbackForce(t *testing.T) {
 	zipPatch(t, filepath.Join(inbox, "patch-2.zip"), map[string]string{
 		"project/a.txt": "a2\n", "project/b.txt": "b\n", ".sky/operation/commit": "feat: add b\n",
 	})
-	if code, out, errs := run(New(), dir, "apply"); code != 0 {
+	if code, out, errs := run(newApp(), dir, "apply"); code != 0 {
 		t.Fatalf("%d %s %s", code, out, errs)
 	}
 	head := git(t, dir, "rev-parse", "HEAD")
-	code, out, errs := run(New(), dir, "rollback", "--force", "2")
+	code, out, errs := run(newApp(), dir, "rollback", "--force", "2")
 	if code != 0 {
 		t.Fatalf("%d %s %s", code, out, errs)
 	}
@@ -463,15 +463,15 @@ func TestRollbackForce(t *testing.T) {
 		t.Errorf("вывод: %s", out)
 	}
 	// force откат — запись; обычный откат возвращает файлы
-	if code, _, errs := run(New(), dir, "rollback"); code != 1 && code != 0 {
+	if code, _, errs := run(newApp(), dir, "rollback"); code != 1 && code != 0 {
 		t.Fatal(errs)
 	}
 	if b, _ := os.ReadFile(filepath.Join(dir, "project", "a.txt")); string(b) != "a2\n" {
 		t.Errorf("откат force-записи должен вернуть файлы: %q", b)
 	}
 	// у записи отката снимка нет
-	run(New(), dir, "rollback")
-	if code, _, errs := run(New(), dir, "rollback", "--force"); code != 1 || !strings.Contains(errs, "нет полного снимка") {
+	run(newApp(), dir, "rollback")
+	if code, _, errs := run(newApp(), dir, "rollback", "--force"); code != 1 || !strings.Contains(errs, "нет полного снимка") {
 		t.Errorf("%d %s", code, errs)
 	}
 }
@@ -484,15 +484,15 @@ func TestManualCommitIsRecord(t *testing.T) {
 	orig, _ := os.ReadFile(readme)
 	os.WriteFile(readme, []byte("правка\n"), 0o644)
 	os.WriteFile(filepath.Join(dir, "new.txt"), []byte("n\n"), 0o644)
-	code, out, errs := run(New(), dir, "commit", "--new", "docs: edit")
+	code, out, errs := run(newApp(), dir, "commit", "--new", "docs: edit")
 	if code != 0 || !strings.Contains(out, "~ README.md") || !strings.Contains(out, "+ new.txt") || !strings.Contains(out, "● запись .sky/stages/history/0001-") {
 		t.Fatalf("%d %s %s", code, out, errs)
 	}
-	if _, o, _ := run(New(), dir, "rollback", "list"); !strings.Contains(o, "0001  commit  файлов: 2  коммит ") {
+	if _, o, _ := run(newApp(), dir, "rollback", "list"); !strings.Contains(o, "0001  commit  файлов: 2  коммит ") {
 		t.Errorf("list: %s", o)
 	}
 	// --keep: коммит снят, файлы на месте
-	if code, o, errs := run(New(), dir, "rollback", "--keep"); code != 0 || !strings.Contains(o, "коммитов снято: 1") {
+	if code, o, errs := run(newApp(), dir, "rollback", "--keep"); code != 0 || !strings.Contains(o, "коммитов снято: 1") {
 		t.Fatalf("keep: %d %s %s", code, o, errs)
 	}
 	if git(t, dir, "rev-parse", "HEAD") != before {
@@ -502,10 +502,10 @@ func TestManualCommitIsRecord(t *testing.T) {
 		t.Errorf("--keep не должен трогать файлы: %q", b)
 	}
 	// «amend»: новый коммит и откат без --keep возвращает файлы «до»
-	if code, _, errs := run(New(), dir, "commit", "--new", "docs: edit again"); code != 0 {
+	if code, _, errs := run(newApp(), dir, "commit", "--new", "docs: edit again"); code != 0 {
 		t.Fatal(errs)
 	}
-	if code, o, errs := run(New(), dir, "rollback"); code != 0 {
+	if code, o, errs := run(newApp(), dir, "rollback"); code != 0 {
 		t.Fatalf("%d %s %s", code, o, errs)
 	}
 	if b, _ := os.ReadFile(readme); string(b) != string(orig) {
@@ -521,10 +521,10 @@ func TestManualCommitIsRecord(t *testing.T) {
 
 func TestRollbackKeepArgs(t *testing.T) {
 	dir, _ := project(t)
-	if code, _, _ := run(New(), dir, "rollback", "--keep", "--force"); code != 1 {
+	if code, _, _ := run(newApp(), dir, "rollback", "--keep", "--force"); code != 1 {
 		t.Error("--keep и --force несовместимы")
 	}
-	if code, _, errs := run(New(), dir, "rollback", "--keep"); code != 1 || !strings.Contains(errs, "нет записей") {
+	if code, _, errs := run(newApp(), dir, "rollback", "--keep"); code != 1 || !strings.Contains(errs, "нет записей") {
 		t.Errorf("%d %s", code, errs)
 	}
 }
@@ -532,7 +532,7 @@ func TestRollbackKeepArgs(t *testing.T) {
 func TestRollbackArgs(t *testing.T) {
 	dir, _ := project(t)
 	for _, a := range [][]string{{"1", "2"}, {"list", "--force"}, {"list", "3"}, {"-1"}} {
-		if code, _, _ := run(New(), dir, append([]string{"rollback"}, a...)...); code != 1 {
+		if code, _, _ := run(newApp(), dir, append([]string{"rollback"}, a...)...); code != 1 {
 			t.Errorf("%v: код %d", a, code)
 		}
 	}
@@ -540,10 +540,10 @@ func TestRollbackArgs(t *testing.T) {
 
 func TestRollbackEmpty(t *testing.T) {
 	dir, _ := project(t)
-	if code, _, errs := run(New(), dir, "rollback"); code != 1 || !strings.Contains(errs, "нет записей") {
+	if code, _, errs := run(newApp(), dir, "rollback"); code != 1 || !strings.Contains(errs, "нет записей") {
 		t.Errorf("%d %s", code, errs)
 	}
-	if code, out, _ := run(New(), dir, "rollback", "list"); code != 0 || !strings.Contains(out, "записей нет") {
+	if code, out, _ := run(newApp(), dir, "rollback", "list"); code != 0 || !strings.Contains(out, "записей нет") {
 		t.Errorf("list: %d %s", code, out)
 	}
 }
@@ -560,7 +560,7 @@ func TestLookCommand(t *testing.T) {
 		t.Errorf("foryou только для чтения: %v", fi.Mode())
 	}
 	os.WriteFile(filepath.Join(dir, "README.md"), []byte("правка\n"), 0o644)
-	if code, _, errs := run(New(), dir, "commit", "docs: edit"); code != 0 {
+	if code, _, errs := run(newApp(), dir, "commit", "docs: edit"); code != 0 {
 		t.Fatal(errs)
 	}
 	h, _ := os.ReadFile(filepath.Join(l.Foryou, "history.md"))
@@ -568,14 +568,14 @@ func TestLookCommand(t *testing.T) {
 		t.Errorf("commit должен обновлять foryou:\n%s", h)
 	}
 	os.WriteFile(filepath.Join(l.Foryou, "junk.md"), nil, 0o644)
-	code, out, _ := run(New(), dir, "look")
+	code, out, _ := run(newApp(), dir, "look")
 	if code != 0 || !strings.Contains(out, "status.md") {
 		t.Fatalf("%d %s", code, out)
 	}
 	if _, err := os.Stat(filepath.Join(l.Foryou, "junk.md")); err == nil {
 		t.Error("посторонний файл в foryou должен быть убран")
 	}
-	if code, _, _ := run(New(), dir, "look", "x"); code != 1 {
+	if code, _, _ := run(newApp(), dir, "look", "x"); code != 1 {
 		t.Error("аргументы не принимаются")
 	}
 }
@@ -585,13 +585,13 @@ func TestUpCommand(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("TMPDIR", tmp)
 	dir := gitDir(t)
-	run(New(), dir, "init")
-	code, out, errs := run(New(), dir, "up")
+	run(newApp(), dir, "init")
+	code, out, errs := run(newApp(), dir, "up")
 	if code != 0 || !strings.Contains(out, "-up.zip") {
 		t.Fatalf("%d %s %s", code, out, errs)
 	}
 	l := repo.At(dir)
-	run(New(), dir, "up")
+	run(newApp(), dir, "up")
 	zs, _ := filepath.Glob(filepath.Join(tmp, "sky-up", "*-up.zip"))
 	if len(zs) != 1 {
 		t.Fatalf("архивов: %v", zs)
@@ -604,15 +604,15 @@ func TestUpCommand(t *testing.T) {
 		t.Fatalf("archive.md: %v %s", err, md)
 	}
 	// обновление foryou после других команд не должно стирать archive.md
-	run(New(), dir, "look")
+	run(newApp(), dir, "look")
 	if _, err := os.Stat(filepath.Join(l.Foryou, "archive.md")); err != nil {
 		t.Error("look стёр archive.md")
 	}
-	if code, _, _ := run(New(), dir, "up", "x"); code != 1 {
+	if code, _, _ := run(newApp(), dir, "up", "x"); code != 1 {
 		t.Error("аргументы не принимаются")
 	}
 	// архив не попадает ни в inbox-маску, ни в записи rollback
-	if code, _, errs := run(New(), dir, "rollback"); code != 1 || !strings.Contains(errs, "нет записей") {
+	if code, _, errs := run(newApp(), dir, "rollback"); code != 1 || !strings.Contains(errs, "нет записей") {
 		t.Errorf("backups/ не должна считаться записью stages: %d %s", code, errs)
 	}
 }
@@ -623,7 +623,7 @@ func TestApplyMakesBackupBeforePatch(t *testing.T) {
 	git(t, dir, "add", "-A")
 	git(t, dir, "commit", "-q", "-m", "chore: keep")
 	zipPatch(t, filepath.Join(inbox, "patch-1.zip"), map[string]string{"project/keep.txt": "новое\n"})
-	code, out, errs := run(New(), dir, "apply")
+	code, out, errs := run(newApp(), dir, "apply")
 	if code != 0 || !strings.Contains(out, "● снимок проекта до патча") {
 		t.Fatalf("%d %s %s", code, out, errs)
 	}
@@ -643,7 +643,7 @@ func TestInitRefusesWithoutGitIdentity(t *testing.T) {
 	t.Setenv("GIT_CONFIG_KEY_0", "user.useConfigOnly")
 	t.Setenv("GIT_CONFIG_VALUE_0", "true")
 	dir := t.TempDir()
-	code, _, errs := run(New(), dir, "init")
+	code, _, errs := run(newApp(), dir, "init")
 	if code != 1 || !strings.Contains(errs, "имя и почту") {
 		t.Fatalf("%d %s", code, errs)
 	}
@@ -659,7 +659,7 @@ func TestCommitUnknownFlag(t *testing.T) {
 	dir := gitDir(t)
 	initWithFiles(t, dir)
 	os.WriteFile(filepath.Join(dir, "README.md"), []byte("правка\n"), 0o644)
-	if code, _, errs := run(New(), dir, "commit", "--all", "docs: x"); code != 1 || !strings.Contains(errs, "неизвестный флаг") {
+	if code, _, errs := run(newApp(), dir, "commit", "--all", "docs: x"); code != 1 || !strings.Contains(errs, "неизвестный флаг") {
 		t.Errorf("%d %s", code, errs)
 	}
 }

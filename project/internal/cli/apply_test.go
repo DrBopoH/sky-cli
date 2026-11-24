@@ -32,7 +32,7 @@ func project(t *testing.T) (dir, inbox string) {
 	t.Helper()
 	dir = gitDir(t)
 	inbox = t.TempDir()
-	if code, _, errs := run(New(), dir, "init"); code != 0 {
+	if code, _, errs := run(newApp(), dir, "init"); code != 0 {
 		t.Fatal(errs)
 	}
 	conf := "scope = [project/]\ninbox = " + inbox + "\n"
@@ -57,7 +57,7 @@ func TestApplyBasic(t *testing.T) {
 		"project/a.txt":       "a",
 		".sky/clouds/plan.md": "план",
 	})
-	code, out, errs := run(New(), dir, "apply")
+	code, out, errs := run(newApp(), dir, "apply")
 	if code != 0 {
 		t.Fatalf("%d %s", code, errs)
 	}
@@ -72,7 +72,7 @@ func TestApplyBasic(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(inbox, "patch-one.zip")); err == nil {
 		t.Error("патч должен уйти из inbox")
 	}
-	if code, _, errs := run(New(), dir, "apply"); code != 1 || !strings.Contains(errs, "нет patch*.zip") {
+	if code, _, errs := run(newApp(), dir, "apply"); code != 1 || !strings.Contains(errs, "нет patch*.zip") {
 		t.Errorf("повторный запуск без патчей: %d %s", code, errs)
 	}
 }
@@ -86,7 +86,7 @@ func TestApplyOrderByTime(t *testing.T) {
 	now := time.Now()
 	os.Chtimes(older, now.Add(-time.Hour), now.Add(-time.Hour))
 	os.Chtimes(newer, now, now)
-	if code, _, errs := run(New(), dir, "apply"); code != 0 {
+	if code, _, errs := run(newApp(), dir, "apply"); code != 0 {
 		t.Fatal(errs)
 	}
 	if b, _ := os.ReadFile(filepath.Join(dir, "x.txt")); string(b) != "новый" {
@@ -101,19 +101,19 @@ func TestApplyDirtyTree(t *testing.T) {
 	os.WriteFile(filepath.Join(dir, "tracked.txt"), []byte("правка руками"), 0o644)
 	zipPatch(t, filepath.Join(inbox, "patch.zip"), map[string]string{"new.txt": "n"})
 
-	if code, _, errs := run(New(), dir, "apply"); code != 1 || !strings.Contains(errs, "--force") {
+	if code, _, errs := run(newApp(), dir, "apply"); code != 1 || !strings.Contains(errs, "--force") {
 		t.Fatalf("грязное дерево должно останавливать: %d %s", code, errs)
 	}
 	if _, err := os.Stat(filepath.Join(dir, "new.txt")); err == nil {
 		t.Fatal("ничего не должно быть записано")
 	}
-	if code, _, errs := run(New(), dir, "apply", "--force"); code != 0 {
+	if code, _, errs := run(newApp(), dir, "apply", "--force"); code != 0 {
 		t.Fatalf("--force: %s", errs)
 	}
 	if _, err := os.Stat(filepath.Join(dir, "new.txt")); err != nil {
 		t.Error("с --force патч должен примениться")
 	}
-	if code, _, errs := run(New(), dir, "apply", "--nope"); code != 1 || !strings.Contains(errs, "--nope") {
+	if code, _, errs := run(newApp(), dir, "apply", "--nope"); code != 1 || !strings.Contains(errs, "--nope") {
 		t.Errorf("неизвестный аргумент: %d %s", code, errs)
 	}
 }
@@ -124,7 +124,7 @@ func TestApplyDeleteOperation(t *testing.T) {
 	os.WriteFile(filepath.Join(dir, "old", "f.txt"), []byte("x"), 0o644)
 	commitAll(t, dir)
 	zipPatch(t, filepath.Join(inbox, "patch.zip"), map[string]string{".sky/operation/delete": "old/f.txt\nnope.txt\n"})
-	code, out, errs := run(New(), dir, "apply")
+	code, out, errs := run(newApp(), dir, "apply")
 	if code != 0 {
 		t.Fatal(errs)
 	}
@@ -148,7 +148,7 @@ func TestApplyStopsOnRejectedPatch(t *testing.T) {
 	for i, p := range []string{first, second, third} {
 		os.Chtimes(p, now.Add(time.Duration(i)*time.Minute), now.Add(time.Duration(i)*time.Minute))
 	}
-	code, _, errs := run(New(), dir, "apply")
+	code, _, errs := run(newApp(), dir, "apply")
 	if code != 1 || !strings.Contains(errs, "patch-2.zip") {
 		t.Fatalf("%d %s", code, errs)
 	}
@@ -169,14 +169,14 @@ func TestApplyStopsOnRejectedPatch(t *testing.T) {
 }
 
 func TestApplyRequiresInit(t *testing.T) {
-	if code, _, errs := run(New(), gitDir(t), "apply"); code != 1 || !strings.Contains(errs, "sky init") {
+	if code, _, errs := run(newApp(), gitDir(t), "apply"); code != 1 || !strings.Contains(errs, "sky init") {
 		t.Fatalf("%d %s", code, errs)
 	}
 }
 
 func TestReadmeDescribesApplyAndOperations(t *testing.T) {
 	dir := gitDir(t)
-	run(New(), dir, "init")
+	run(newApp(), dir, "init")
 	b, _ := os.ReadFile(filepath.Join(repo.At(dir).Readme, "readme.md"))
 	for _, want := range []string{"`sky apply [--force]`", "## Операции", "- `delete` — поле: `путь`", "## Патчи"} {
 		if !strings.Contains(string(b), want) {
@@ -195,7 +195,7 @@ func TestApplyCommitsEachPatchInOrder(t *testing.T) {
 	})
 	old := time.Now().Add(-time.Hour)
 	os.Chtimes(filepath.Join(inbox, "patch-1.zip"), old, old)
-	code, out, errs := run(New(), dir, "apply")
+	code, out, errs := run(newApp(), dir, "apply")
 	if code != 0 {
 		t.Fatalf("%d %s %s", code, out, errs)
 	}

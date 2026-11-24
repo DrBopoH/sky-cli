@@ -8,7 +8,6 @@ import (
 
 	"github.com/DrBopoH/sky-cli/internal/apply"
 	"github.com/DrBopoH/sky-cli/internal/conf"
-	"github.com/DrBopoH/sky-cli/internal/ops"
 	"github.com/DrBopoH/sky-cli/internal/readme"
 	"github.com/DrBopoH/sky-cli/internal/repo"
 	"github.com/DrBopoH/sky-cli/internal/version"
@@ -30,14 +29,17 @@ type Command struct {
 }
 
 type App struct {
-	Commands []Command
-	Plan     apply.Planner // как читать патч; подставляет точка входа, ядро адаптера не знает
+	Commands   []Command
+	Plan       apply.Planner  // как читать патч; подставляет точка входа
+	Operations []readme.Entry // операции патча для readme.md; их знает адаптер патча, собирает точка входа
 }
 
-func New() *App {
+// New собирает консоль. Что делать с патчем и какие операции он знает, консоль не знает: это даёт точка входа.
+func New(plan apply.Planner, operations []readme.Entry) *App {
 	return &App{
-		Commands: []Command{initCommand(), applyCommand(), commitCommand(), rollbackCommand(), lookCommand(), upCommand()},
-		Plan:     ops.Build,
+		Commands:   []Command{initCommand(), applyCommand(), commitCommand(), rollbackCommand(), lookCommand(), upCommand()},
+		Plan:       plan,
+		Operations: operations,
 	}
 }
 
@@ -55,11 +57,7 @@ func (a *App) Entries() []readme.Entry {
 
 // Heal приводит .sky/readme/ к генерируемому набору: недостающее создаёт, изменённое и лишнее убирает.
 func (a *App) Heal(l repo.Layout) ([]repo.Change, error) {
-	var opEntries []readme.Entry
-	for _, o := range ops.All() {
-		opEntries = append(opEntries, readme.Entry{Usage: o.Name, Summary: o.Doc})
-	}
-	files := readme.Files(a.Entries(), opEntries, conf.Render(conf.Default()))
+	files := readme.Files(a.Entries(), a.Operations, conf.Render(conf.Default()))
 	gen := make([]repo.Generated, len(files))
 	for i, f := range files {
 		gen[i] = repo.Generated{Name: f.Name, Content: f.Content}
