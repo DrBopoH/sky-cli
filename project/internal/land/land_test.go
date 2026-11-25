@@ -343,3 +343,27 @@ func TestBuildAfterForkPointKeepsOldCount(t *testing.T) {
 		t.Errorf("ждали v30.hash (28 + 2 в ветке), получено %s", res.Message)
 	}
 }
+
+func TestSourceCommitInsteadOfBranch(t *testing.T) {
+	r := newRepo(t)
+	r.git("checkout", "-q", "--detach", Dev)
+	r.commit("x.txt", "x\n", "feat: x")
+	src := r.git("rev-parse", "HEAD")
+	short := r.git("rev-parse", "--short=7", "HEAD")
+	res, err := r.land(Options{Summary: "Add x", Seed: true, From: "1.1.35+35", Source: src})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "Add x | v1.1.36+36." + short; res.Message != want || r.subject(Dev) != want {
+		t.Fatalf("%q / %q", res.Message, r.subject(Dev))
+	}
+	if r.git("symbolic-ref", "--short", "HEAD") != Dev {
+		t.Error("после squash HEAD на целевой ветке")
+	}
+	if _, err := r.land(Options{Summary: "Add y", Source: src}); err == nil {
+		t.Error("с коммитом-источником нужна цель")
+	}
+	if _, err := r.land(Options{Summary: "Add y", Source: src, Seed: true, Module: "leaf"}); err == nil {
+		t.Error("цель одна: либо модуль, либо зерно")
+	}
+}

@@ -208,3 +208,86 @@ func TestApplyCommitsEachPatchInOrder(t *testing.T) {
 		t.Errorf("дерево не чистое: %q", st)
 	}
 }
+
+// landProject — project() с именованным коммитом в dev и реестром модулей leaf/main.
+func landProject(t *testing.T) (dir, inbox string) {
+	t.Helper()
+	dir, inbox = project(t)
+	os.MkdirAll(filepath.Join(dir, "docs"), 0o755)
+	os.WriteFile(filepath.Join(dir, "docs", "PROJECT-GRAPH.md"), []byte("| Модуль | Зависит от |\n|---|---|\n| leaf | — |\n| main | leaf |\n"), 0o644)
+	gitIn(t, dir, "add", "-A")
+	gitIn(t, dir, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "Add graph | v1.1.1+1.abc1234")
+	return dir, inbox
+}
+
+func TestApplyLandSeedWithoutWip(t *testing.T) {
+	dir, inbox := landProject(t)
+	zipPatch(t, filepath.Join(inbox, "patch-a.zip"), map[string]string{"project/a.txt": "a", ".sky/operation/commit": "feat: add a\n"})
+	code, out, errs := run(newApp(), dir, "apply", "--land", "Add a", "--seed")
+	if code != 0 || !strings.Contains(out, "✓ Add a | v1.1.2+2.") {
+		t.Fatalf("%d %s %s", code, out, errs)
+	}
+	if gitIn(t, dir, "branch", "--show-current") != "dev" || gitIn(t, dir, "branch", "--list", "wip/*") != "" {
+		t.Error("HEAD на dev, веток wip нет")
+	}
+	if !strings.HasPrefix(gitIn(t, dir, "log", "-1", "--format=%s", "dev"), "Add a | v1.1.2+2.") {
+		t.Error("dev должна получить именованный коммит")
+	}
+	if _, err := os.Stat(filepath.Join(inbox, "patch-a.zip")); err == nil {
+		t.Error("патч уходит из inbox")
+	}
+}
+
+func TestApplyLandModuleTakesOldestAndStacks(t *testing.T) {
+	dir, inbox := landProject(t)
+	zipPatch(t, filepath.Join(inbox, "patch-1-first.zip"), map[string]string{"project/leaf/a.go": "a", ".sky/operation/commit": "feat: a\n"})
+	old := time.Now().Add(-time.Hour)
+	os.Chtimes(filepath.Join(inbox, "patch-1-first.zip"), old, old)
+	zipPatch(t, filepath.Join(inbox, "patch-2-second.zip"), map[string]string{"project/leaf/b.go": "b", ".sky/operation/commit": "feat: b\n"})
+	code, out, errs := run(newApp(), dir, "apply", "--land", "Add leaf a", "--module", "leaf")
+	if code != 0 || !strings.Contains(out, "в inbox ещё патчей: 1") {
+		t.Fatalf("%d %s %s", code, out, errs)
+	}
+	br := gitIn(t, dir, "branch", "--show-current")
+	if !strings.HasPrefix(br, "leaf/") || strings.HasPrefix(gitIn(t, dir, "log", "-1", "--format=%s", "dev"), "Add leaf") {
+		t.Fatalf("слой leaf, dev не меняется: %s", br)
+	}
+	// второй патч идёт с ветки слоя: sky сам уходит на detached dev и вливает в ту же открытую ветку
+	code, out, errs = run(newApp(), dir, "apply", "--land", "Add leaf b", "--module", "leaf")
+	if code != 0 || gitIn(t, dir, "branch", "--show-current") != br || !strings.HasPrefix(gitIn(t, dir, "log", "-1", "--format=%s", br), "Add leaf b | v3.") {
+		t.Fatalf("%d %s %s", code, out, errs)
+	}
+	if gitIn(t, dir, "branch", "--list", "wip/*") != "" {
+		t.Error("веток wip быть не должно")
+	}
+}
+
+func TestApplyLandFailureLeavesWipForRepair(t *testing.T) {
+	dir, inbox := landProject(t)
+	zipPatch(t, filepath.Join(inbox, "patch-nocommit.zip"), map[string]string{"project/a.txt": "a"})
+	code, _, errs := run(newApp(), dir, "apply", "--land", "Add a", "--seed")
+	if code == 0 || !strings.Contains(errs, "wip/") {
+		t.Fatalf("%d %s", code, errs)
+	}
+	if b := gitIn(t, dir, "branch", "--show-current"); !strings.HasPrefix(b, "wip/") || !strings.HasSuffix(b, "/nocommit") {
+		t.Errorf("ветка разбора: %q", b)
+	}
+}
+
+func TestApplyLandFlagErrors(t *testing.T) {
+	dir, inbox := landProject(t)
+	zipPatch(t, filepath.Join(inbox, "patch-x.zip"), map[string]string{"project/x.txt": "x", ".sky/operation/commit": "feat: x\n"})
+	for _, args := range [][]string{
+		{"apply", "--module", "leaf"},
+		{"apply", "--land", "Add x"},
+		{"apply", "--land", "Add x", "--seed", "--module", "leaf"},
+		{"apply", "--land", "Add x", "--seed", "--force"},
+	} {
+		if code, _, _ := run(newApp(), dir, args...); code == 0 {
+			t.Errorf("%v: ожидалась ошибка", args)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(inbox, "patch-x.zip")); err != nil {
+		t.Error("при ошибке флагов патч остаётся в inbox")
+	}
+}
