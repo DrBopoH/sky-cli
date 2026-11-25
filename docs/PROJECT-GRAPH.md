@@ -21,22 +21,25 @@
 | commit | сообщения и параметры коммитов | — |
 | conf | конфигурация | — |
 | version | версии | — |
+| named | версия именованного коммита: разбор и запись сообщения | — |
+| graph | чтение реестра модулей, цепочки от зерна | — |
 | readme | статические тексты (встроенные) | — |
 | repo | состояние репозитория | gitx |
 | pack | упаковка архивов | gitx, guard |
 | look | просмотр состояния и журнала | conf, gitx, history |
+| land | перенос фичи в граф веток по регламенту, версия по истории dev | gitx, graph, named |
 | apply | план эффектов, проверка, запуск, откат | commit, gitx, guard, history, notation |
 | ops | патч-операции, адаптер плана | apply, commit, guard, notation |
 | work | применение патча, откат | apply, gitx, guard, history, pack, repo |
-| cli | команды и оркестрация | apply, commit, conf, history, look, pack, readme, repo, version, work |
+| cli | команды и оркестрация | apply, commit, conf, history, land, look, pack, readme, repo, version, work |
 | main | зерно: сборка и запуск | cli, ops, readme |
 
 ## 3. Уровни
 
 | Уровень | Модули |
 |---|---|
-| 0 (листья) | notation, guard, history, gitx, commit, conf, version, readme |
-| 1 | repo, pack, look, apply |
+| 0 (листья) | notation, guard, history, gitx, commit, conf, version, readme, named, graph |
+| 1 | repo, pack, look, apply, land |
 | 2 | ops, work |
 | 3 | cli |
 | 4 | main (зерно) |
