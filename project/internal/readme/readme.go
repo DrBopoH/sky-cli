@@ -10,6 +10,9 @@ import (
 //go:embed text/readme.md
 var readmeText string
 
+//go:embed text/docs.md
+var docsText string
+
 //go:embed text/MT-git-reglament.md
 var reglamentText string
 
@@ -50,6 +53,7 @@ func Files(cmds, operations []Entry, confExample string) []File {
 	r = strings.Replace(r, confMarker, strings.TrimRight(confExample, "\n"), 1)
 	return []File{
 		{Name: "readme.md", Content: []byte(r)},
+		{Name: "docs.md", Content: []byte(docsText)},
 		{Name: "MT-git-reglament.md", Content: []byte(reglamentText)},
 		{Name: "MT-unify-systems.md", Content: []byte(unifyText)},
 		{Name: "MT-fix-before-reset.md", Content: []byte(fixText)},
