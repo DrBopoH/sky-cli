@@ -17,7 +17,7 @@
 | notation | разбор нотации диапазонов и путей | — |
 | guard | допуск путей, чувствительные файлы | — |
 | history | журнал патчей, коммитов, бэкапов | — |
-| gitx | единственная точка доступа к git | — |
+| gitx | единственная точка доступа к git (в том числе squash в ветку) | — |
 | commit | сообщения и параметры коммитов | — |
 | conf | конфигурация | — |
 | version | версии | — |
@@ -27,13 +27,14 @@
 | repo | состояние репозитория | gitx |
 | pack | упаковка архивов | gitx, guard |
 | look | просмотр состояния и журнала | conf, gitx, history |
-| vhist | версия из истории git: последний именованный коммит dev, сборки, база после сборки | gitx, named |
+| vhist | версия из истории git: последний именованный коммит dev, сборки и их исправления, база после сборки | gitx, named |
 | land | перенос фичи в граф веток по регламенту, версия по истории dev | gitx, graph, named, vhist |
 | build | сборка: команды из конфига, ветка `build/ММДД-ЧЧММ`, хвост | conf, gitx, named, vhist |
+| fix | исправления сборки: squash на ветку сборки с версией `R.sB-F.C+T` | gitx, named, vhist |
 | apply | план эффектов, проверка, запуск, откат | commit, gitx, guard, history, notation |
 | ops | патч-операции, адаптер плана | apply, commit, guard, notation |
 | work | применение патча, откат | apply, gitx, guard, history, pack, repo |
-| cli | команды и оркестрация | apply, build, commit, conf, history, land, look, pack, readme, repo, version, work |
+| cli | команды и оркестрация | apply, build, commit, conf, fix, history, land, look, pack, readme, repo, version, work |
 | main | зерно: сборка и запуск | cli, ops, readme |
 
 ## 3. Уровни
@@ -42,7 +43,7 @@
 |---|---|
 | 0 (листья) | notation, guard, history, gitx, commit, conf, version, readme, named, graph |
 | 1 | repo, pack, look, apply, vhist |
-| 2 | ops, work, land, build |
+| 2 | ops, work, land, build, fix |
 | 3 | cli |
 | 4 | main (зерно) |
 

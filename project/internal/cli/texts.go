@@ -23,6 +23,8 @@ var (
 	summaryLandRaw string
 	//go:embed text/build-summary.txt
 	summaryBuildRaw string
+	//go:embed text/fix-summary.txt
+	summaryFixRaw string
 )
 
 var (
@@ -34,4 +36,5 @@ var (
 	summaryRollback = strings.TrimSpace(summaryRollbackRaw)
 	summaryLand     = strings.TrimSpace(summaryLandRaw)
 	summaryBuild    = strings.TrimSpace(summaryBuildRaw)
+	summaryFix      = strings.TrimSpace(summaryFixRaw)
 )

@@ -158,3 +158,24 @@ func Present(root string) []string {
 	sort.Strings(ps)
 	return ps
 }
+
+// SquashInto вливает src в target одним коммитом msg и оставляет HEAD на target.
+// При неудаче возвращает дерево и ветку back как были.
+func SquashInto(root, target, src, msg, back string) error {
+	if _, err := Run(root, "checkout", "-q", target); err != nil {
+		return err
+	}
+	undo := func() {
+		Run(root, "reset", "-q", "--hard", "HEAD")
+		Run(root, "checkout", "-q", back)
+	}
+	if _, err := Run(root, "merge", "--squash", src); err != nil {
+		undo()
+		return fmt.Errorf("слияние %s → %s не удалось, ничего не изменено: %v", src, target, err)
+	}
+	if _, err := Run(root, "commit", "-q", "-m", msg); err != nil {
+		undo()
+		return err
+	}
+	return nil
+}

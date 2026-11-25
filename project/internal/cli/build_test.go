@@ -90,3 +90,29 @@ func TestBuildArgumentErrors(t *testing.T) {
 		}
 	}
 }
+
+func TestFixThroughConsole(t *testing.T) {
+	dir := buildRepo(t, "")
+	if code, _, errs := run(newApp(), dir, "build"); code != 0 {
+		t.Fatalf("build: %s", errs)
+	}
+	br := strings.TrimSpace(strings.TrimPrefix(gitIn(t, dir, "branch", "--list", "build/*"), "*"))
+	gitIn(t, dir, "checkout", "-q", "-b", "hot", br)
+	os.WriteFile(filepath.Join(dir, "h.txt"), []byte("h\n"), 0o644)
+	gitIn(t, dir, "add", "h.txt")
+	gitIn(t, dir, "commit", "-q", "-m", "fix: h")
+	code, out, errs := run(newApp(), dir, "fix", "Fix h", "--dry")
+	if code != 0 || !strings.Contains(out, "--dry") || gitIn(t, dir, "symbolic-ref", "--short", "HEAD") != "hot" {
+		t.Fatalf("dry: %d %s %s", code, out, errs)
+	}
+	code, out, errs = run(newApp(), dir, "fix", "Fix h")
+	if code != 0 || !strings.Contains(out, "✓ Fix h | v1.a1-1.1+2.") {
+		t.Fatalf("fix: %d %s %s", code, out, errs)
+	}
+	if got := gitIn(t, dir, "log", "-1", "--format=%s", br); !strings.HasPrefix(got, "Fix h | v1.a1-1.1+2.") {
+		t.Fatalf("ветка сборки: %s", got)
+	}
+	if code, _, errs := run(newApp(), dir, "fix"); code != 1 || errs == "" {
+		t.Errorf("без резюме: %d %q", code, errs)
+	}
+}

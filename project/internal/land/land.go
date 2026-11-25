@@ -237,20 +237,7 @@ func (e *env) count0(a, b string) int {
 
 // squash вливает src в target одним коммитом; при неудаче возвращает всё как было.
 func (e *env) squash(target, src, msg, back string) error {
-	if err := e.checkout(target); err != nil {
-		return err
-	}
-	if _, err := e.git("merge", "--squash", src); err != nil {
-		e.git("reset", "-q", "--hard", "HEAD")
-		e.checkout(back)
-		return fmt.Errorf("слияние %s → %s не удалось, ничего не изменено: %v", src, target, err)
-	}
-	if _, err := e.git("commit", "-q", "-m", msg); err != nil {
-		e.git("reset", "-q", "--hard", "HEAD")
-		e.checkout(back)
-		return err
-	}
-	return nil
+	return gitx.SquashInto(e.o.Root, target, src, msg, back)
 }
 
 func (e *env) seed(cur string) error {

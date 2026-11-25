@@ -3,6 +3,7 @@
 package vhist
 
 import (
+	"strconv"
 	"strings"
 
 	"github.com/DrBopoH/sky-cli/internal/gitx"
@@ -42,8 +43,8 @@ type Build struct {
 	Source  string // полный хэш коммита dev, с которого снята сборка
 }
 
-// Builds — хвосты сборок во всех ветках «build/…».
-func (h H) Builds() []Build {
+// commits — все коммиты сборок (хвосты и исправления) во всех ветках «build/…».
+func (h H) commits() []Build {
 	out := gitx.Try(h.Root, "log", "--branches=build/*", "--format=%H%x09%s")
 	seen := map[string]bool{}
 	var bs []Build
@@ -54,13 +55,69 @@ func (h H) Builds() []Build {
 		}
 		seen[hash] = true
 		_, v, ok := named.Parse(subj)
-		if !ok || !v.IsBuild() || v.F != 0 {
+		if !ok || !v.IsBuild() {
 			continue
 		}
-		src := strings.TrimSpace(gitx.Try(h.Root, "rev-parse", "--verify", "-q", v.Hash+"^{commit}"))
-		bs = append(bs, Build{Hash: hash, Version: v, Source: src})
+		b := Build{Hash: hash, Version: v}
+		if v.F == 0 {
+			b.Source = strings.TrimSpace(gitx.Try(h.Root, "rev-parse", "--verify", "-q", v.Hash+"^{commit}"))
+		}
+		bs = append(bs, b)
 	}
 	return bs
+}
+
+// Builds — хвосты сборок во всех ветках «build/…».
+func (h H) Builds() []Build {
+	var bs []Build
+	for _, b := range h.commits() {
+		if b.Version.F == 0 {
+			bs = append(bs, b)
+		}
+	}
+	return bs
+}
+
+// MaxT — наибольшее T среди сборок и исправлений с этим R (0, если их нет).
+func (h H) MaxT(r int) int {
+	m := 0
+	for _, b := range h.commits() {
+		if b.Version.R == r && b.Version.T > m {
+			m = b.Version.T
+		}
+	}
+	return m
+}
+
+// Latest — ветка и версия головы самой поздней сборки (по времени хвоста).
+func (h H) Latest() (branch string, head named.Version, ok bool) {
+	var best Build
+	var bt int
+	for _, b := range h.Builds() {
+		t, _ := strconv.Atoi(strings.TrimSpace(gitx.Try(h.Root, "log", "-1", "--format=%ct", b.Hash)))
+		if !ok || t > bt {
+			best, bt, ok = b, t, true
+		}
+	}
+	if !ok {
+		return "", named.Version{}, false
+	}
+	branch = h.Branch(best)
+	if branch == "" {
+		return "", named.Version{}, false
+	}
+	head, ok = h.Head(branch)
+	return branch, head, ok
+}
+
+// Head — версия головы ветки сборки (хвост или последнее исправление).
+func (h H) Head(branch string) (named.Version, bool) {
+	s := strings.TrimSpace(gitx.Try(h.Root, "log", "-1", "--format=%s", "refs/heads/"+branch))
+	_, v, ok := named.Parse(s)
+	if !ok || !v.IsBuild() {
+		return named.Version{}, false
+	}
+	return v, true
 }
 
 // BuildOf — сборка с этими R и B, если есть.
@@ -95,6 +152,9 @@ func (h H) Effective(rev string) (named.Version, bool, error) {
 	if b, ok := h.BuildOf(v.R, v.B); ok && b.Source != "" && gitx.OK(h.Root, "merge-base", "--is-ancestor", b.Source, rev) {
 		v.B++
 		v.C = 0
+	}
+	if m := h.MaxT(v.R); m > v.T {
+		v.T = m // исправления сборок тоже растят T (регламент, 3.5.9)
 	}
 	return v, found, nil
 }
