@@ -688,3 +688,33 @@ func TestCommitUnknownFlag(t *testing.T) {
 		t.Errorf("%d %s", code, errs)
 	}
 }
+
+func TestInitInCloneTakesDevFromOrigin(t *testing.T) {
+	base := t.TempDir()
+	bare := filepath.Join(base, "o.git")
+	git(t, base, "init", "-q", "--bare", "-b", "main", bare)
+	src := filepath.Join(base, "src")
+	git(t, base, "clone", "-q", bare, src)
+	git(t, src, "config", "user.name", "t")
+	git(t, src, "config", "user.email", "t@t")
+	git(t, src, "config", "commit.gpgsign", "false")
+	os.WriteFile(filepath.Join(src, "a.txt"), []byte("a\n"), 0o644)
+	git(t, src, "add", "-A")
+	git(t, src, "commit", "-q", "-m", "chore: init")
+	git(t, src, "branch", "-M", "main")
+	git(t, src, "push", "-q", "origin", "main")
+	git(t, src, "switch", "-q", "-c", "dev")
+	os.WriteFile(filepath.Join(src, "b.txt"), []byte("b\n"), 0o644)
+	git(t, src, "add", "-A")
+	git(t, src, "commit", "-q", "-m", "Add b | v1.1.1+1.abc1234")
+	git(t, src, "push", "-q", "origin", "dev")
+	clone := filepath.Join(base, "clone")
+	git(t, base, "clone", "-q", bare, clone)
+	code, out, errs := run(newApp(), clone, "init")
+	if code != 0 || !strings.Contains(out, "dev взята из origin/dev") {
+		t.Fatalf("%d %s %s", code, out, errs)
+	}
+	if git(t, clone, "rev-parse", "dev") != git(t, clone, "rev-parse", "origin/dev") || git(t, clone, "branch", "--show-current") != "dev" {
+		t.Error("dev клона должна совпасть с origin/dev, а не отходить от main")
+	}
+}

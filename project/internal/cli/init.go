@@ -105,6 +105,8 @@ func runInit(a *App, env Env, args []string) error {
 		return fmt.Errorf("ветка dev не создана: %w", err)
 	case st == repo.DevCreated:
 		fmt.Fprintf(env.Out, "✓ ветка dev создана от вершины %s и активна, история не менялась\n", cur)
+	case st == repo.DevTracked:
+		fmt.Fprintln(env.Out, "✓ ветка dev взята из origin/dev, история не менялась")
 	case st == repo.DevSkipped:
 		fmt.Fprintf(env.Out, "· ветки dev нет, а HEAD не на main/master (%s): создай её от нужного коммита — git switch -c dev <коммит>\n", orDetached(cur))
 	}
