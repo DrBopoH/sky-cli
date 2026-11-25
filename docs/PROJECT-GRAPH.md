@@ -32,7 +32,7 @@
 | modules | отчёт по реестру и веткам модулей, разбор имени `модуль/ММДД-ЧЧММ` | gitx, graph |
 | land | перенос фичи в граф веток по регламенту, версия по истории dev | gitx, graph, modules, named, vhist |
 | build | сборка: команды из конфига, ветка `build/ММДД-ЧЧММ`, хвост | conf, gitx, named, vhist |
-| feature | локальная ветка фичи `wip/ММДД-ЧЧММ/имя`, цель ветки в git config | gitx, graph, vhist |
+| feature | локальная ветка фичи `wip/ГГГГ-ММДД/имя`, цель ветки в git config | gitx, graph, vhist |
 | fix | исправления сборки: squash на ветку сборки с версией `R.sB-F.C+T` | gitx, named, vhist |
 | publish | публикация сборки в `main` одним коммитом | gitx, named, vhist |
 | pr | push wip-ветки и pull request через gh (R1), чтение цели из описания PR | ghx, gitx, named |

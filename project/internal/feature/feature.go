@@ -1,4 +1,4 @@
-// Package feature заводит локальную ветку фичи по регламенту (3.1): wip/ММДД-ЧЧММ/имя.
+// Package feature заводит локальную ветку фичи по регламенту (3.1): wip/ГГГГ-ММДД/имя.
 // Цель ветки (модуль с цепочкой, зерно или исправление сборки) запоминается в git config:
 // sky land и sky fix на этой ветке берут её оттуда и обходятся без флагов.
 package feature
@@ -16,8 +16,10 @@ import (
 
 const (
 	Prefix = "wip/"
-	Dev    = "dev"
-	maxLen = 40
+	// DayStamp — вторая секция имени: год и дата без времени, одна папка на день (минута дала бы папку на каждую фичу).
+	DayStamp = "2006-0102"
+	Dev      = "dev"
+	maxLen   = 40
 )
 
 // Kind — куда ветка попадёт.
@@ -148,7 +150,7 @@ func run(o Options, res *Result, say func(string, ...any)) error {
 		}
 		t.Kind, t.Module, t.Chain = Module, o.Module, chain
 	}
-	name := Prefix + o.Now.Format("0102-1504") + "/" + o.Name
+	name := Prefix + o.Now.Format(DayStamp) + "/" + o.Name
 	if gitx.OK(o.Root, "rev-parse", "--verify", "-q", "refs/heads/"+name) {
 		return fmt.Errorf("ветка %s уже есть", name)
 	}
