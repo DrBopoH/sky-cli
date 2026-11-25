@@ -6,7 +6,6 @@ package fix
 import (
 	"fmt"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/DrBopoH/sky-cli/internal/gitx"
 	"github.com/DrBopoH/sky-cli/internal/named"
@@ -14,8 +13,7 @@ import (
 )
 
 const (
-	Dev    = "dev"
-	MaxLen = 72
+	Dev = "dev"
 )
 
 // Options — параметры одного вызова.
@@ -44,14 +42,8 @@ func Run(o Options) (Result, error) {
 }
 
 func run(o Options, res *Result, say func(string, ...any)) error {
-	s := o.Summary
-	switch {
-	case strings.TrimSpace(s) == "":
-		return fmt.Errorf("нужно резюме: sky fix \"summary\"")
-	case strings.ContainsAny(s, "\r\n"):
-		return fmt.Errorf("резюме одной строкой")
-	case utf8.RuneCountInString(s) > MaxLen:
-		return fmt.Errorf("резюме длиннее %d символов", MaxLen)
+	if err := named.CheckLine("резюме", o.Summary); err != nil {
+		return err
 	}
 	if d := gitx.Dirty(o.Root); d != "" {
 		return fmt.Errorf("в отслеживаемых файлах есть незакоммиченные правки: закоммить (sky commit) или убери\n%s", d)
@@ -88,7 +80,7 @@ func run(o Options, res *Result, say func(string, ...any)) error {
 		State: head.State, F: head.F + 1,
 		Hash: strings.TrimSpace(gitx.Try(o.Root, "rev-parse", "--short=7", "refs/heads/"+cur)),
 	}
-	msg := named.Message(s, v)
+	msg := named.Message(o.Summary, v)
 	res.Message, res.Target = msg, target
 	say("исправление: %s → %s (squash)", cur, target)
 	say("  %s", msg)

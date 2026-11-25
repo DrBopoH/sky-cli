@@ -8,7 +8,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"unicode/utf8"
 
 	"github.com/DrBopoH/sky-cli/internal/gitx"
 	"github.com/DrBopoH/sky-cli/internal/graph"
@@ -20,7 +19,6 @@ import (
 const (
 	Dev       = "dev"
 	GraphPath = graph.Path
-	MaxLen    = 72
 )
 
 // Options — параметры одного вызова.
@@ -127,14 +125,8 @@ func (e *env) plan(chain []string) ([]step, error) {
 }
 
 func (e *env) validate() error {
-	s := e.o.Summary
-	switch {
-	case strings.TrimSpace(s) == "":
-		return fmt.Errorf("нужно резюме: sky land \"summary\"")
-	case strings.ContainsAny(s, "\r\n"):
-		return fmt.Errorf("резюме одной строкой")
-	case utf8.RuneCountInString(s) > MaxLen:
-		return fmt.Errorf("резюме длиннее %d символов", MaxLen)
+	if err := named.CheckLine("резюме", e.o.Summary); err != nil {
+		return err
 	}
 	if d := gitx.Dirty(e.o.Root); d != "" {
 		return fmt.Errorf("в отслеживаемых файлах есть незакоммиченные правки: закоммить (sky commit) или убери\n%s", d)

@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"regexp"
 	"strconv"
+	"strings"
+	"unicode/utf8"
 )
 
 // Version — версия именованного коммита. Full: R, B, C, T заданы (dev); иначе задан только C (ветка модуля).
@@ -88,4 +90,21 @@ func ParseBase(s string) (Version, error) {
 	v.C, _ = strconv.Atoi(m[3])
 	v.T, _ = strconv.Atoi(m[4])
 	return v, nil
+}
+
+// MaxLine — наибольшая длина резюме и названия в рунах (после типа в сообщении коммита — тот же предел).
+const MaxLine = 72
+
+// CheckLine проверяет резюме или название: что оно есть, одной строкой и не длиннее MaxLine.
+// what — как называть проверяемое в ошибке («резюме», «название»).
+func CheckLine(what, s string) error {
+	switch {
+	case strings.TrimSpace(s) == "":
+		return fmt.Errorf("нужно %s", what)
+	case strings.ContainsAny(s, "\r\n"):
+		return fmt.Errorf("%s одной строкой", what)
+	case utf8.RuneCountInString(s) > MaxLine:
+		return fmt.Errorf("%s длиннее %d символов", what, MaxLine)
+	}
+	return nil
 }

@@ -7,7 +7,6 @@ package publish
 import (
 	"fmt"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/DrBopoH/sky-cli/internal/gitx"
 	"github.com/DrBopoH/sky-cli/internal/named"
@@ -15,8 +14,7 @@ import (
 )
 
 const (
-	Main   = "main"
-	MaxLen = 72
+	Main = "main"
 )
 
 // Options — параметры одного вызова.
@@ -59,8 +57,8 @@ func Run(o Options) (Result, error) {
 		}
 	}
 	title = strings.TrimSpace(title)
-	if utf8.RuneCountInString(title) > MaxLen || strings.ContainsAny(title, "\r\n") {
-		return res, fmt.Errorf("название одной строкой не длиннее %d символов", MaxLen)
+	if err := named.CheckLine("название", title); err != nil {
+		return res, err
 	}
 	tip := strings.TrimSpace(gitx.Try(root, "rev-parse", "--verify", "refs/heads/"+branch))
 	head.Hash = strings.TrimSpace(gitx.Try(root, "rev-parse", "--short=7", tip))

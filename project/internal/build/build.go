@@ -13,7 +13,6 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
-	"unicode/utf8"
 
 	"github.com/DrBopoH/sky-cli/internal/conf"
 	"github.com/DrBopoH/sky-cli/internal/gitx"
@@ -24,7 +23,6 @@ import (
 const (
 	Dev     = "dev"
 	Prefix  = vhist.Prefix // ветки сборок: build/ММДД-ЧЧММ
-	MaxLen  = 72
 	tailMax = 4000
 )
 
@@ -118,8 +116,8 @@ func (e *env) run() error {
 		return fmt.Errorf("сборка %d.%d уже снята (%s): следующая — после нового именованного коммита в %s", tip.R, tip.B, orNone(e.h.Branch(b)), Dev)
 	}
 	title := Title(tip.B, o.State, o.Title)
-	if utf8.RuneCountInString(title) > MaxLen || strings.ContainsAny(title, "\r\n") {
-		return fmt.Errorf("название сборки одной строкой не длиннее %d символов", MaxLen)
+	if err := named.CheckLine("название сборки", title); err != nil {
+		return err
 	}
 	tipHash := strings.TrimSpace(gitx.Try(o.Root, "rev-parse", "--verify", Dev))
 	v := named.Version{Full: true, R: tip.R, B: tip.B, C: tip.C, T: tip.T, State: o.State, Hash: strings.TrimSpace(gitx.Try(o.Root, "rev-parse", "--short=7", tipHash))}
