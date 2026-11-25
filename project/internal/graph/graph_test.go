@@ -51,3 +51,38 @@ func TestParseErrors(t *testing.T) {
 		t.Fatal("неизвестная зависимость")
 	}
 }
+
+func TestLevelsAndDependents(t *testing.T) {
+	g, _ := Parse(doc)
+	lv := g.Levels()
+	if lv["leaf"] != 0 || lv["mid"] != 1 || lv["side"] != 1 || lv["top"] != 2 || lv["main"] != 3 {
+		t.Fatalf("%v", lv)
+	}
+	bl := g.ByLevel()
+	if len(bl) != 4 || strings.Join(bl[1], ",") != "mid,side" {
+		t.Fatalf("%v", bl)
+	}
+	if d := g.Dependents("leaf"); strings.Join(d, ",") != "mid,side" {
+		t.Fatalf("%v", d)
+	}
+	if d := g.Dependents("main"); len(d) != 0 {
+		t.Fatalf("%v", d)
+	}
+}
+
+func TestLevelUsesLongestPath(t *testing.T) {
+	g, err := Parse("| Модуль | Зависит от |\n|---|---|\n| a | — |\n| b | a |\n| c | a, b |\n")
+	if err != nil || g.Levels()["c"] != 2 {
+		t.Fatalf("%v %v", g.Levels(), err)
+	}
+}
+
+func TestParseRejectsCycle(t *testing.T) {
+	_, err := Parse("| Модуль | Зависит от |\n|---|---|\n| a | c |\n| b | a |\n| c | b |\n")
+	if err == nil || !strings.Contains(err.Error(), "цикл") || !strings.Contains(err.Error(), "→") {
+		t.Fatalf("%v", err)
+	}
+	if _, err := Parse("| Модуль | Зависит от |\n|---|---|\n| a | a |\n"); err == nil {
+		t.Fatal("самозависимость — цикл")
+	}
+}

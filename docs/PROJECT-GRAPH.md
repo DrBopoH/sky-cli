@@ -22,20 +22,22 @@
 | conf | конфигурация | — |
 | version | версии | — |
 | named | версия именованного коммита и сборки: разбор и запись сообщения | — |
-| graph | чтение реестра модулей, цепочки от зерна, выбор цепочки | — |
+| graph | чтение реестра модулей, проверка цикла, уровни, цепочки от зерна, выбор цепочки | — |
 | readme | статические тексты (встроенные) | — |
-| repo | состояние репозитория | gitx |
+| repo | состояние репозитория, заведение `dev` | gitx |
 | pack | упаковка архивов | gitx, guard |
 | look | просмотр состояния и журнала | conf, gitx, history |
 | vhist | версия из истории git: последний именованный коммит dev, сборки и их исправления, база после сборки | gitx, named |
-| land | перенос фичи в граф веток по регламенту, версия по истории dev | gitx, graph, named, vhist |
+| modules | отчёт по реестру и веткам модулей, разбор имени `модуль/ММДД-ЧЧММ` | gitx, graph |
+| land | перенос фичи в граф веток по регламенту, версия по истории dev | gitx, graph, modules, named, vhist |
 | build | сборка: команды из конфига, ветка `build/ММДД-ЧЧММ`, хвост | conf, gitx, named, vhist |
 | feature | локальная ветка фичи `wip/ММДД-ЧЧММ/имя`, цель ветки в git config | gitx, graph, vhist |
 | fix | исправления сборки: squash на ветку сборки с версией `R.sB-F.C+T` | gitx, named, vhist |
+| publish | публикация сборки в `main` одним коммитом | gitx, named, vhist |
 | apply | план эффектов, проверка, запуск, откат | commit, gitx, guard, history, notation |
 | ops | патч-операции, адаптер плана | apply, commit, guard, notation |
 | work | применение патча, откат | apply, gitx, guard, history, pack, repo |
-| cli | команды и оркестрация | apply, build, commit, conf, feature, fix, history, land, look, pack, readme, repo, version, work |
+| cli | команды и оркестрация | apply, build, commit, conf, feature, fix, history, land, look, modules, pack, publish, readme, repo, version, work |
 | main | зерно: сборка и запуск | cli, ops, readme |
 
 ## 3. Уровни
@@ -43,8 +45,8 @@
 | Уровень | Модули |
 |---|---|
 | 0 (листья) | notation, guard, history, gitx, commit, conf, version, readme, named, graph |
-| 1 | repo, pack, look, apply, vhist |
-| 2 | ops, work, land, build, fix, feature |
+| 1 | repo, pack, look, apply, vhist, modules |
+| 2 | ops, work, land, build, fix, feature, publish |
 | 3 | cli |
 | 4 | main (зерно) |
 

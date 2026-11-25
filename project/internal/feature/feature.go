@@ -59,9 +59,7 @@ type Result struct {
 
 var nameRe = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
 
-func cfg(root, branch, key string) string {
-	return strings.TrimSpace(gitx.Try(root, "config", "--get", "branch."+branch+"."+key))
-}
+func cfg(root, branch, key string) string { return gitx.BranchConfig(root, branch, key) }
 
 // Load возвращает цель ветки; ok=false, если sky её не заводил.
 func Load(root, branch string) (Target, bool) {

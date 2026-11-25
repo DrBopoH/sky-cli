@@ -97,9 +97,26 @@ func runInit(a *App, env Env, args []string) error {
 			return fmt.Errorf("первый коммит не создан: %w", err)
 		}
 		fmt.Fprintln(env.Out, "✓ первый коммит в main, ветка dev создана и активна")
+		return nil
+	}
+	// Репозиторий с историей: история не меняется, но регламенту нужна dev.
+	switch st, cur, err := l.EnsureDev(); {
+	case err != nil:
+		return fmt.Errorf("ветка dev не создана: %w", err)
+	case st == repo.DevCreated:
+		fmt.Fprintf(env.Out, "✓ ветка dev создана от вершины %s и активна, история не менялась\n", cur)
+	case st == repo.DevSkipped:
+		fmt.Fprintf(env.Out, "· ветки dev нет, а HEAD не на main/master (%s): создай её от нужного коммита — git switch -c dev <коммит>\n", orDetached(cur))
 	}
 	return nil
 }
 
 // firstCommitMsg — сообщение первого коммита в main.
 const firstCommitMsg = "chore: init. At the moment: project created by sky"
+
+func orDetached(b string) string {
+	if b == "" {
+		return "detached HEAD"
+	}
+	return b
+}

@@ -179,3 +179,8 @@ func SquashInto(root, target, src, msg, back string) error {
 	}
 	return nil
 }
+
+// BranchConfig читает настройку ветки (branch.<имя>.<ключ>); нет её — пустая строка.
+func BranchConfig(root, branch, key string) string {
+	return strings.TrimSpace(Try(root, "config", "--get", "branch."+branch+"."+key))
+}

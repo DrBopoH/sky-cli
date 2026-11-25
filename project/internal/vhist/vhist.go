@@ -3,12 +3,16 @@
 package vhist
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 
 	"github.com/DrBopoH/sky-cli/internal/gitx"
 	"github.com/DrBopoH/sky-cli/internal/named"
 )
+
+// Prefix — ветки сборок: build/ММДД-ЧЧММ.
+const Prefix = "build/"
 
 // H — чтение истории репозитория Root; From — «R.B.C+T», точка отсчёта, пока именованных коммитов нет.
 type H struct {
@@ -45,7 +49,7 @@ type Build struct {
 
 // commits — все коммиты сборок (хвосты и исправления) во всех ветках «build/…».
 func (h H) commits() []Build {
-	out := gitx.Try(h.Root, "log", "--branches=build/*", "--format=%H%x09%s")
+	out := gitx.Try(h.Root, "log", "--branches="+Prefix+"*", "--format=%H%x09%s")
 	seen := map[string]bool{}
 	var bs []Build
 	for _, ln := range strings.Split(out, "\n") {
@@ -134,7 +138,7 @@ func (h H) BuildOf(r, b int) (Build, bool) {
 func (h H) Branch(b Build) string {
 	out := gitx.Try(h.Root, "for-each-ref", "--contains", b.Hash, "--format=%(refname:short)", "refs/heads/")
 	for _, n := range strings.Split(out, "\n") {
-		if strings.HasPrefix(n, "build/") {
+		if strings.HasPrefix(n, Prefix) {
 			return n
 		}
 	}
@@ -157,4 +161,24 @@ func (h H) Effective(rev string) (named.Version, bool, error) {
 		v.T = m // исправления сборок тоже растят T (регламент, 3.5.9)
 	}
 	return v, found, nil
+}
+
+// Pick выбирает ветку сборки: заданную («build/1125-0336» или «1125-0336») или самую позднюю.
+func (h H) Pick(build string) (string, named.Version, error) {
+	if build == "" {
+		b, v, ok := h.Latest()
+		if !ok {
+			return "", named.Version{}, fmt.Errorf("сборок нет (сначала sky build)")
+		}
+		return b, v, nil
+	}
+	b := build
+	if !strings.HasPrefix(b, Prefix) {
+		b = Prefix + b
+	}
+	v, ok := h.Head(b)
+	if !ok {
+		return "", named.Version{}, fmt.Errorf("«%s» не ветка сборки (нужна «build/ММДД-ЧЧММ» с коммитом сборки)", build)
+	}
+	return b, v, nil
 }

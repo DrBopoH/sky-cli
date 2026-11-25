@@ -23,7 +23,7 @@ import (
 
 const (
 	Dev     = "dev"
-	Prefix  = "build/" // ветки сборок: build/ММДД-ЧЧММ
+	Prefix  = vhist.Prefix // ветки сборок: build/ММДД-ЧЧММ
 	MaxLen  = 72
 	tailMax = 4000
 )

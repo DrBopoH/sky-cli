@@ -5,7 +5,6 @@ package land
 
 import (
 	"fmt"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -13,6 +12,7 @@ import (
 
 	"github.com/DrBopoH/sky-cli/internal/gitx"
 	"github.com/DrBopoH/sky-cli/internal/graph"
+	"github.com/DrBopoH/sky-cli/internal/modules"
 	"github.com/DrBopoH/sky-cli/internal/named"
 	"github.com/DrBopoH/sky-cli/internal/vhist"
 )
@@ -42,8 +42,6 @@ type Result struct {
 	Branch  string // ветка, на которой остался HEAD
 }
 
-var branchRe = regexp.MustCompile(`^([^/]+)/(\d{4}-\d{4})$`)
-
 type env struct {
 	o   Options
 	res *Result
@@ -52,9 +50,7 @@ type env struct {
 func (e *env) say(f string, a ...any)             { e.res.Lines = append(e.res.Lines, fmt.Sprintf(f, a...)) }
 func (e *env) git(args ...string) (string, error) { return gitx.Run(e.o.Root, args...) }
 func (e *env) try(args ...string) string          { return strings.TrimSpace(gitx.Try(e.o.Root, args...)) }
-func (e *env) cfg(branch, key string) string {
-	return e.try("config", "--get", "branch."+branch+"."+key)
-}
+func (e *env) cfg(branch, key string) string      { return gitx.BranchConfig(e.o.Root, branch, key) }
 
 func (e *env) setCfg(branch, key, val string) error {
 	_, err := e.git("config", "branch."+branch+"."+key, val)
@@ -99,8 +95,8 @@ type step struct {
 func (e *env) findOpen(module, parent string) string {
 	out := e.try("for-each-ref", "--format=%(refname:short)", "refs/heads/")
 	for _, b := range strings.Split(out, "\n") {
-		m := branchRe.FindStringSubmatch(b)
-		if m == nil || m[1] != module {
+		m, _, ok := modules.ParseBranch(b)
+		if !ok || m != module {
 			continue
 		}
 		if e.cfg(b, "sky-state") == "open" && e.cfg(b, "sky-parent") == parent {
@@ -168,7 +164,7 @@ func Run(o Options) (Result, error) {
 	if err != nil {
 		return *e.res, err
 	}
-	isModule := branchRe.MatchString(cur)
+	_, _, isModule := modules.ParseBranch(cur)
 	switch {
 	case cur == Dev:
 		return *e.res, fmt.Errorf("на %s нечего вливать: перейди на ветку фичи или модуля", Dev)
@@ -296,7 +292,7 @@ func (e *env) feature(cur string) error {
 func (e *env) openChildren(branch string) []string {
 	var kids []string
 	for _, b := range strings.Split(e.try("for-each-ref", "--format=%(refname:short)", "refs/heads/"), "\n") {
-		if branchRe.MatchString(b) && e.cfg(b, "sky-parent") == branch && e.cfg(b, "sky-state") == "open" {
+		if _, _, ok := modules.ParseBranch(b); ok && e.cfg(b, "sky-parent") == branch && e.cfg(b, "sky-state") == "open" {
 			kids = append(kids, b)
 		}
 	}

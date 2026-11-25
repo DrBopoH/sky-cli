@@ -216,6 +216,34 @@ func (l Layout) FirstCommit(msg string, files []string) error {
 	return run("switch", "-q", "-c", "dev")
 }
 
+// DevState — что EnsureDev сделал с веткой dev.
+type DevState int
+
+const (
+	DevExists  DevState = iota // dev уже есть, ничего не менялось
+	DevCreated                 // dev создана от вершины main/master и активна
+	DevSkipped                 // dev нет, но HEAD не на main/master: откуда ей идти, решает человек
+)
+
+// mainBranches — ветки, от вершины которых sky сам отводит dev в репозитории с историей.
+var mainBranches = map[string]bool{"main": true, "master": true}
+
+// EnsureDev заводит dev в репозитории с историей: от вершины main (или master), если HEAD стоит на ней.
+// Рабочее дерево и история не меняются; cur — ветка HEAD («» при detached HEAD).
+func (l Layout) EnsureDev() (state DevState, cur string, err error) {
+	if gitx.OK(l.Root, "rev-parse", "--verify", "-q", "refs/heads/dev") {
+		return DevExists, "", nil
+	}
+	cur = strings.TrimSpace(gitx.Try(l.Root, "symbolic-ref", "-q", "--short", "HEAD"))
+	if !mainBranches[cur] {
+		return DevSkipped, cur, nil
+	}
+	if _, err := gitx.Run(l.Root, "switch", "-q", "-c", "dev"); err != nil {
+		return DevSkipped, cur, err
+	}
+	return DevCreated, cur, nil
+}
+
 // SyncForyou приводит .sky/foryou/ к переданному набору: пишет файлы только для чтения, лишнее убирает.
 func (l Layout) SyncForyou(files []Generated) ([]Change, error) {
 	if err := l.MkDirs(); err != nil {

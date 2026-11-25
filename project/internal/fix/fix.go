@@ -15,7 +15,6 @@ import (
 
 const (
 	Dev    = "dev"
-	Prefix = "build/"
 	MaxLen = 72
 )
 
@@ -63,11 +62,11 @@ func run(o Options, res *Result, say func(string, ...any)) error {
 		return fmt.Errorf("HEAD не на ветке: перейди на ветку исправления")
 	case cur == Dev:
 		return fmt.Errorf("исправление пишется на отдельной ветке, а не в %s: создай её от ветки сборки", Dev)
-	case strings.HasPrefix(cur, Prefix):
+	case strings.HasPrefix(cur, vhist.Prefix):
 		return fmt.Errorf("ты на ветке сборки %s: перейди на ветку исправления, отведённую от неё", cur)
 	}
 	h := vhist.H{Root: o.Root}
-	target, head, err := pick(h, o)
+	target, head, err := h.Pick(o.Build)
 	if err != nil {
 		return err
 	}
@@ -97,24 +96,4 @@ func run(o Options, res *Result, say func(string, ...any)) error {
 		return nil
 	}
 	return gitx.SquashInto(o.Root, target, cur, msg, cur)
-}
-
-// pick выбирает ветку сборки: заданную или самую позднюю.
-func pick(h vhist.H, o Options) (string, named.Version, error) {
-	if o.Build == "" {
-		b, v, ok := h.Latest()
-		if !ok {
-			return "", named.Version{}, fmt.Errorf("сборок нет: исправлять нечего (сначала sky build)")
-		}
-		return b, v, nil
-	}
-	b := o.Build
-	if !strings.HasPrefix(b, Prefix) {
-		b = Prefix + b
-	}
-	v, ok := h.Head(b)
-	if !ok {
-		return "", named.Version{}, fmt.Errorf("«%s» не ветка сборки (нужна «build/ММДД-ЧЧММ» с коммитом сборки)", o.Build)
-	}
-	return b, v, nil
 }

@@ -156,3 +156,39 @@ func TestFeatureRemembersTargetForLandAndFix(t *testing.T) {
 		t.Fatalf("HEAD после исправления: %s", b)
 	}
 }
+
+func TestModulesAndPublishThroughConsole(t *testing.T) {
+	dir := buildRepo(t, "")
+	reg := filepath.Join(dir, "docs", "PROJECT-GRAPH.md")
+	os.MkdirAll(filepath.Dir(reg), 0o755)
+	os.WriteFile(reg, []byte("| Модуль | Зависит от |\n|---|---|\n| leaf | — |\n| main | leaf |\n"), 0o644)
+	gitIn(t, dir, "add", "-A")
+	gitIn(t, dir, "commit", "-q", "-m", "Add graph | v1.1.2+2.abc1234")
+	code, out, errs := run(newApp(), dir, "modules")
+	if code != 0 || !strings.Contains(out, "зерно: main") || !strings.Contains(out, "leaf") {
+		t.Fatalf("modules: %d %s %s", code, out, errs)
+	}
+	if code, out, _ := run(newApp(), dir, "modules", "leaf"); code != 0 || !strings.Contains(out, "dev → leaf") {
+		t.Fatalf("modules leaf: %d %s", code, out)
+	}
+	if code, _, _ := run(newApp(), dir, "modules", "a", "b"); code == 0 {
+		t.Fatal("два модуля — ошибка")
+	}
+	if code, _, _ := run(newApp(), dir, "publish"); code == 0 {
+		t.Fatal("нет main и сборок — ошибка")
+	}
+	if code, _, errs := run(newApp(), dir, "build"); code != 0 {
+		t.Fatalf("build: %s", errs)
+	}
+	code, out, errs = run(newApp(), dir, "publish", "--dry")
+	if code != 0 || !strings.Contains(out, "--dry") || !strings.Contains(out, "Build 1 alpha | v1.a1.2+2.") {
+		t.Fatalf("publish --dry: %d %s %s", code, out, errs)
+	}
+	code, _, errs = run(newApp(), dir, "publish")
+	if code != 0 {
+		t.Fatalf("publish: %s", errs)
+	}
+	if got := gitIn(t, dir, "log", "-1", "--format=%s", "main"); !strings.HasPrefix(got, "Build 1 alpha | v1.a1.2+2.") {
+		t.Errorf("main: %q", got)
+	}
+}

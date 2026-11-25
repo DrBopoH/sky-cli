@@ -277,17 +277,50 @@ func TestInitFirstCommitAndDev(t *testing.T) {
 	}
 }
 
-func TestInitLeavesExistingHistoryAlone(t *testing.T) {
+func historyRepo(t *testing.T) string {
+	t.Helper()
 	dir := gitDir(t)
 	git(t, dir, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "old")
+	return dir
+}
+
+func TestInitInHistoryCreatesDevFromMain(t *testing.T) {
+	dir := historyRepo(t)
 	before := git(t, dir, "rev-parse", "HEAD")
-	branch := git(t, dir, "branch", "--show-current")
-	run(newApp(), dir, "init")
-	if git(t, dir, "rev-parse", "HEAD") != before || git(t, dir, "branch", "--show-current") != branch {
-		t.Error("init не должен трогать репозиторий с историей")
+	main := git(t, dir, "branch", "--show-current")
+	code, out, errs := run(newApp(), dir, "init")
+	if code != 0 || !strings.Contains(out, "ветка dev создана от вершины "+main) {
+		t.Fatalf("%d %s %s", code, out, errs)
 	}
-	if git(t, dir, "branch", "--format=%(refname:short)") != branch {
-		t.Error("лишние ветки в репозитории с историей")
+	if git(t, dir, "rev-parse", "HEAD") != before || git(t, dir, "rev-parse", main) != before || git(t, dir, "rev-parse", "dev") != before {
+		t.Error("история не должна меняться: dev стартует с вершины main")
+	}
+	if git(t, dir, "branch", "--show-current") != "dev" {
+		t.Error("работа продолжается на dev")
+	}
+}
+
+func TestInitInHistoryOffMainOnlyHints(t *testing.T) {
+	dir := historyRepo(t)
+	git(t, dir, "switch", "-q", "-c", "topic")
+	code, out, errs := run(newApp(), dir, "init")
+	if code != 0 || !strings.Contains(out, "git switch -c dev") {
+		t.Fatalf("%d %s %s", code, out, errs)
+	}
+	if git(t, dir, "branch", "--show-current") != "topic" || strings.Contains(git(t, dir, "branch", "--format=%(refname:short)"), "dev") {
+		t.Error("с чужой ветки dev не заводим")
+	}
+}
+
+func TestInitInHistoryKeepsExistingDev(t *testing.T) {
+	dir := historyRepo(t)
+	git(t, dir, "branch", "dev")
+	main := git(t, dir, "branch", "--show-current")
+	if code, out, errs := run(newApp(), dir, "init"); code != 0 || strings.Contains(out, "dev создана") {
+		t.Fatalf("%d %s %s", code, out, errs)
+	}
+	if git(t, dir, "branch", "--show-current") != main {
+		t.Error("HEAD не переключается, если dev уже есть")
 	}
 }
 

@@ -78,7 +78,98 @@ func Parse(md string) (Graph, error) {
 			}
 		}
 	}
+	if err := g.cycle(); err != nil {
+		return Graph{}, err
+	}
 	return g, nil
+}
+
+// cycle ищет цикл зависимостей и называет его по звеньям: «a → b → a».
+func (g Graph) cycle() error {
+	const (
+		open = iota + 1
+		done
+	)
+	state := map[string]int{}
+	var path []string
+	var visit func(m string) error
+	visit = func(m string) error {
+		switch state[m] {
+		case done:
+			return nil
+		case open:
+			i := 0
+			for path[i] != m {
+				i++
+			}
+			return fmt.Errorf("в графе цикл зависимостей: %s", strings.Join(append(append([]string(nil), path[i:]...), m), " → "))
+		}
+		state[m] = open
+		path = append(path, m)
+		for _, d := range g.Deps[m] {
+			if err := visit(d); err != nil {
+				return err
+			}
+		}
+		path = path[:len(path)-1]
+		state[m] = done
+		return nil
+	}
+	for _, m := range g.Order {
+		if err := visit(m); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// Levels — уровень каждого модуля: длина самой длинной цепочки зависимостей вниз (у листа 0).
+func (g Graph) Levels() map[string]int {
+	lv := map[string]int{}
+	var level func(m string) int
+	level = func(m string) int {
+		if v, ok := lv[m]; ok {
+			return v
+		}
+		n := 0
+		for _, d := range g.Deps[m] {
+			if l := level(d) + 1; l > n {
+				n = l
+			}
+		}
+		lv[m] = n
+		return n
+	}
+	for _, m := range g.Order {
+		level(m)
+	}
+	return lv
+}
+
+// ByLevel группирует модули по уровням в порядке реестра: ByLevel()[0] — листья.
+func (g Graph) ByLevel() [][]string {
+	lv := g.Levels()
+	var out [][]string
+	for _, m := range g.Order {
+		for len(out) <= lv[m] {
+			out = append(out, nil)
+		}
+		out[lv[m]] = append(out[lv[m]], m)
+	}
+	return out
+}
+
+// Dependents — модули, которые прямо зависят от m, в порядке реестра.
+func (g Graph) Dependents(m string) []string {
+	var out []string
+	for _, x := range g.Order {
+		for _, d := range g.Deps[x] {
+			if d == m {
+				out = append(out, x)
+			}
+		}
+	}
+	return out
 }
 
 // Root — зерно: единственный модуль, от которого никто не зависит.
