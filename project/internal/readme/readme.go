@@ -22,6 +22,9 @@ var unifyText string
 //go:embed text/MT-fix-before-reset.md
 var fixText string
 
+//go:embed text/MT-code-style.md
+var codeStyleText string
+
 const (
 	commandsMarker   = "{{commands}}"
 	operationsMarker = "{{operations}}"
@@ -57,5 +60,6 @@ func Files(cmds, operations []Entry, confExample string) []File {
 		{Name: "MT-git-reglament.md", Content: []byte(reglamentText)},
 		{Name: "MT-unify-systems.md", Content: []byte(unifyText)},
 		{Name: "MT-fix-before-reset.md", Content: []byte(fixText)},
+		{Name: "MT-code-style.md", Content: []byte(codeStyleText)},
 	}
 }

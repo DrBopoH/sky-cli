@@ -97,7 +97,7 @@
 
 ## Регламент версий
 
-Версии, ветки, именованные коммиты и сборки описаны в [MT-git-reglament.md](MT-git-reglament.md); смысл нумерации — в [MT-fix-before-reset.md](MT-fix-before-reset.md), устройство кода — в [MT-unify-systems.md](MT-unify-systems.md).
+Версии, ветки, именованные коммиты и сборки описаны в [MT-git-reglament.md](MT-git-reglament.md); смысл нумерации — в [MT-fix-before-reset.md](MT-fix-before-reset.md), устройство кода — в [MT-unify-systems.md](MT-unify-systems.md); оформление исходного текста — в [MT-code-style.md](MT-code-style.md).
 
 ## Команды
 

@@ -4,6 +4,7 @@
 
 ## Build 10 — в работе (`v1.a10`)
 
+- **v1.10.11** — Новый регламент `MT-code-style` в `.sky/readme/`: комментарии как «белый флаг», запись выражений (`a = 1`, `a+= 1`, `+ -` с пробелами, `* /` и скобки слитно), snake_case, табуляция, число пустых строк по уровням близости; приоритет за требованиями языка и `gofmt`; упомянут в `README.md` и `readme.md` (`project/internal/readme`)
 - **v1.10.9** — `sky apply --land "резюме" --module M | --seed`: патч сразу в слой, без ветки `wip` (патч — готовая фича без шума): самый старый патч из inbox применяется на detached HEAD от `dev`, `land` вливает этот коммит (новый параметр `land.Options.Source`: источник — коммит, а не ветка), общие ветки пушатся, остальные патчи ждут; при сбое слияния заводится `wip` для разбора (`project/internal/cli/apply.go`, `project/internal/land`)
 - **v1.10.5** — Слой `cli` и `repo` одной пачкой: `sky init` в свежем клоне берёт `dev` из `origin/dev`, а не отводит от `main` (раньше истории расходились, и `sky merge` с `sky sync` отказывали); `sky publish` пушит `main` в `origin` без force, как `land`, `fix` и `build`, `--local` отключает (`project/internal/repo`, `project/internal/cli`)
 

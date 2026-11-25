@@ -70,4 +70,4 @@ sky rollback        # откатить последний патч
 | [docs/PROJECT-GRAPH.md](docs/PROJECT-GRAPH.md) | модули и зависимости |
 | [CHANGELOG.md](CHANGELOG.md) | изменения по сборкам |
 
-Теория и регламент вынесены в отдельные работы: MT-unify-systems, MT-fix-before-reset, MT-git-reglament.
+Теория и регламент вынесены в отдельные работы: MT-unify-systems, MT-fix-before-reset, MT-git-reglament, MT-code-style.
