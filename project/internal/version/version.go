@@ -9,12 +9,12 @@ var Version = "dev"
 
 // String — версия для печати: подставленная при сборке, иначе «dev» с хэшем коммита из сведений о сборке Go.
 func String() string {
-	if Version != "dev" {
+	if Version != "" && Version != "dev" {
 		return Version
 	}
 	bi, ok := debug.ReadBuildInfo()
 	if !ok {
-		return Version
+		return "dev"
 	}
 	rev, dirty := "", false
 	for _, s := range bi.Settings {
@@ -28,10 +28,10 @@ func String() string {
 		}
 	}
 	if rev == "" {
-		return Version
+		return "dev"
 	}
 	if dirty {
-		return Version + "+" + rev + "-dirty"
+		return "dev+" + rev + "-dirty"
 	}
-	return Version + "+" + rev
+	return "dev+" + rev
 }
