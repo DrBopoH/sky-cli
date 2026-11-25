@@ -71,7 +71,7 @@ func TestModuleTargetIsRemembered(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.Branch != "wip/1125-1005/add-cache" || r.git("symbolic-ref", "--short", "HEAD") != res.Branch {
+	if res.Branch != "wip/2026-1125/add-cache" || r.git("symbolic-ref", "--short", "HEAD") != res.Branch {
 		t.Fatalf("ветка: %+v", res)
 	}
 	tg, ok := Load(r.dir, res.Branch)
