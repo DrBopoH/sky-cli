@@ -5,11 +5,10 @@
 package pr
 
 import (
-	"bytes"
 	"fmt"
-	"os/exec"
 	"strings"
 
+	"github.com/DrBopoH/sky-cli/internal/ghx"
 	"github.com/DrBopoH/sky-cli/internal/gitx"
 	"github.com/DrBopoH/sky-cli/internal/named"
 )
@@ -53,6 +52,38 @@ func Body(o Options) string {
 	return b.String()
 }
 
+// Target — цель ветки, прочитанная из описания PR (обратное к Body).
+type Target struct {
+	Branch string
+	Kind   string // seed, module или fix
+	Module string
+	Chain  []string
+	Build  string // для fix: ветка сборки
+}
+
+// ParseBody читает блок sky-… в конце описания PR; ok=false, если блока с целью нет (PR открыт не sky pr).
+func ParseBody(body string) (t Target, ok bool) {
+	for _, ln := range strings.Split(body, "\n") {
+		k, v, found := strings.Cut(strings.TrimSpace(ln), ": ")
+		if !found {
+			continue
+		}
+		switch k {
+		case "sky-branch":
+			t.Branch = v
+		case "sky-target":
+			t.Kind = v
+		case "sky-module":
+			t.Module = v
+		case "sky-chain":
+			t.Chain = strings.Split(v, ",")
+		case "sky-build":
+			t.Build = v
+		}
+	}
+	return t, t.Kind == "seed" || t.Kind == "module" || t.Kind == "fix"
+}
+
 // Run выполняет R1 по параметрам.
 func Run(o Options) (Result, error) {
 	res := Result{}
@@ -76,7 +107,7 @@ func Run(o Options) (Result, error) {
 	if !gitx.OK(root, "remote", "get-url", Remote) {
 		return res, fmt.Errorf("нет удалённого репозитория %s: добавь его (git remote add %s <url>); пока его нет, фичи вливает локальный sky land", Remote, Remote)
 	}
-	if _, err := exec.LookPath("gh"); err != nil {
+	if !ghx.Available() {
 		return res, fmt.Errorf("не найдена команда gh (GitHub CLI): установи её и войди (gh auth login)")
 	}
 	if d := gitx.Dirty(root); d != "" {
@@ -111,7 +142,7 @@ func Run(o Options) (Result, error) {
 		if o.Draft {
 			args = append(args, "--draft")
 		}
-		out, err := gh(root, args...)
+		out, err := ghx.Run(root, args...)
 		if err != nil {
 			return res, fmt.Errorf("ветка запушена, но PR не открыт: %v", err)
 		}
@@ -128,20 +159,9 @@ func Run(o Options) (Result, error) {
 
 // existing — адрес открытого PR этой ветки или пустая строка.
 func existing(root, branch string) string {
-	out, err := gh(root, "pr", "list", "--head", branch, "--state", "open", "--json", "url", "--jq", ".[0].url")
+	out, err := ghx.Run(root, "pr", "list", "--head", branch, "--state", "open", "--json", "url", "--jq", ".[0].url")
 	if err != nil {
 		return ""
 	}
 	return strings.TrimSpace(out)
-}
-
-func gh(root string, args ...string) (string, error) {
-	c := exec.Command("gh", args...)
-	c.Dir = root
-	var out, errb bytes.Buffer
-	c.Stdout, c.Stderr = &out, &errb
-	if err := c.Run(); err != nil {
-		return out.String(), fmt.Errorf("gh %s: %v: %s", strings.Join(args[:2], " "), err, strings.TrimSpace(errb.String()))
-	}
-	return out.String(), nil
 }
