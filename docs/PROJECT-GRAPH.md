@@ -37,11 +37,12 @@
 | publish | публикация сборки в `main` одним коммитом | gitx, named, vhist |
 | pr | push wip-ветки и pull request через gh (R1), чтение цели из описания PR | ghx, gitx, named |
 | sync | подтягивание общих веток из origin (R2) | gitx, modules, vhist |
+| protect | защита общих веток на GitHub правилами через gh api (R4) | ghx |
 | merge | слияние PR и веток модулей в общую область через land и fix, push, закрытие PR (R3) | fix, ghx, gitx, land, pr, sync |
 | apply | план эффектов, проверка, запуск, откат | commit, gitx, guard, history, notation |
 | ops | патч-операции, адаптер плана | apply, commit, guard, notation |
 | work | применение патча, откат | apply, gitx, guard, history, pack, repo |
-| cli | команды и оркестрация | apply, build, commit, conf, feature, fix, history, land, look, merge, modules, pack, pr, publish, readme, repo, sync, version, work |
+| cli | команды и оркестрация | apply, build, commit, conf, feature, fix, history, land, look, merge, modules, pack, pr, protect, publish, readme, repo, sync, version, work |
 | main | зерно: сборка и запуск | cli, ops, readme |
 
 ## 3. Уровни
@@ -49,7 +50,7 @@
 | Уровень | Модули |
 |---|---|
 | 0 (листья) | notation, guard, history, gitx, ghx, commit, conf, version, readme, named, graph |
-| 1 | repo, pack, look, apply, vhist, modules, pr |
+| 1 | repo, pack, look, apply, vhist, modules, pr, protect |
 | 2 | ops, work, land, build, fix, feature, publish, sync |
 | 3 | merge |
 | 4 | cli |

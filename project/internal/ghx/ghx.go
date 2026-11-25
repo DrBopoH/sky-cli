@@ -15,9 +15,15 @@ func Available() bool {
 }
 
 // Run запускает gh в папке root и возвращает стандартный вывод; при ошибке в тексте — вывод ошибок gh.
-func Run(root string, args ...string) (string, error) {
+func Run(root string, args ...string) (string, error) { return RunInput(root, "", args...) }
+
+// RunInput — то же, но input подаётся на стандартный ввод (для gh api --input -).
+func RunInput(root, input string, args ...string) (string, error) {
 	c := exec.Command("gh", args...)
 	c.Dir = root
+	if input != "" {
+		c.Stdin = strings.NewReader(input)
+	}
 	var out, errb bytes.Buffer
 	c.Stdout, c.Stderr = &out, &errb
 	if err := c.Run(); err != nil {

@@ -1,0 +1,7 @@
+{
+  "name": "sky regulation: no force-push",
+  "target": "branch",
+  "enforcement": "active",
+  "conditions": {"ref_name": {"include": ["refs/heads/main", "refs/heads/dev", "refs/heads/*/*"], "exclude": []}},
+  "rules": [{"type": "non_fast_forward"}]
+}
