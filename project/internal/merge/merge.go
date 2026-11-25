@@ -83,16 +83,7 @@ func (e *env) run() error {
 }
 
 // shared — вершины общих веток: по ним видно, что слияние изменило.
-func (e *env) shared() map[string]string {
-	out := map[string]string{}
-	for _, ln := range strings.Split(strings.TrimSpace(gitx.Try(e.o.Root, "for-each-ref", "--format=%(refname:short) %(objectname)", "refs/heads/")), "\n") {
-		n, h, ok := strings.Cut(ln, " ")
-		if ok && sync.Shared(n) {
-			out[n] = h
-		}
-	}
-	return out
-}
+func (e *env) shared() map[string]string { return sync.Tips(e.o.Root) }
 
 // sync подтягивает общие ветки; расхождение истории или грязная ветка делают слияние небезопасным.
 func (e *env) sync() error {

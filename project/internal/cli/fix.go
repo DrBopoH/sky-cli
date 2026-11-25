@@ -7,9 +7,10 @@ import (
 	"github.com/DrBopoH/sky-cli/internal/feature"
 	"github.com/DrBopoH/sky-cli/internal/fix"
 	"github.com/DrBopoH/sky-cli/internal/repo"
+	"github.com/DrBopoH/sky-cli/internal/sync"
 )
 
-const fixUsage = `sky fix "резюме" [--build build/ММДД-ЧЧММ] [--dry]`
+const fixUsage = `sky fix "резюме" [--build build/ММДД-ЧЧММ] [--dry] [--local]`
 
 func fixCommand() Command {
 	return Command{
@@ -24,10 +25,13 @@ func fixCommand() Command {
 func runFix(a *App, env Env, args []string) error {
 	var o fix.Options
 	var rest []string
+	local := false
 	for i := 0; i < len(args); i++ {
 		switch x := args[i]; {
 		case x == "--dry":
 			o.Dry = true
+		case x == "--local":
+			local = true
 		case x == "--build":
 			if i+1 >= len(args) {
 				return fmt.Errorf("--build требует значение: %s", fixUsage)
@@ -55,6 +59,7 @@ func runFix(a *App, env Env, args []string) error {
 			o.Build = t.Base
 		}
 	}
+	before := sync.Tips(l.Root)
 	res, err := fix.Run(o)
 	for _, ln := range res.Lines {
 		fmt.Fprintln(env.Out, ln)
@@ -67,5 +72,6 @@ func runFix(a *App, env Env, args []string) error {
 		return nil
 	}
 	fmt.Fprintf(env.Out, "✓ %s (HEAD: %s)\n", res.Message, res.Branch)
+	pushShared(env, l.Root, before, local)
 	return nil
 }

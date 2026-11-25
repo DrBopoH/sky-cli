@@ -56,3 +56,64 @@ func TestLandArgumentErrors(t *testing.T) {
 		}
 	}
 }
+
+// landWithOrigin — репозиторий с bare-origin и веткой feature, готовой к land --seed.
+func landWithOrigin(t *testing.T) (dir, bare string) {
+	t.Helper()
+	dir = t.TempDir()
+	if code, _, errs := run(newApp(), dir, "init"); code != 0 {
+		t.Fatalf("init: %s", errs)
+	}
+	bare = filepath.Join(t.TempDir(), "o.git")
+	if out, err := exec.Command("git", "init", "-q", "--bare", bare).CombinedOutput(); err != nil {
+		t.Fatalf("%v %s", err, out)
+	}
+	gitIn(t, dir, "remote", "add", "origin", bare)
+	gitIn(t, dir, "checkout", "-q", "-b", "feature")
+	os.WriteFile(filepath.Join(dir, "f.txt"), []byte("f\n"), 0o644)
+	gitIn(t, dir, "add", "f.txt")
+	gitIn(t, dir, "commit", "-q", "-m", "feat: f")
+	return dir, bare
+}
+
+func remoteTip(bare, branch string) string {
+	out, _ := exec.Command("git", "-C", bare, "rev-parse", "--verify", "-q", "refs/heads/"+branch).Output()
+	return strings.TrimSpace(string(out))
+}
+
+func TestLandPushesSharedBranchToOrigin(t *testing.T) {
+	dir, bare := landWithOrigin(t)
+	code, out, errs := run(newApp(), dir, "land", "Add f", "--seed", "--from", "1.1.35+35")
+	if code != 0 || !strings.Contains(out, "push origin dev") {
+		t.Fatalf("%d %s %s", code, out, errs)
+	}
+	if remoteTip(bare, "dev") != gitIn(t, dir, "rev-parse", "dev") {
+		t.Error("dev должна оказаться в origin")
+	}
+	if remoteTip(bare, "feature") != "" {
+		t.Error("ветка фичи (не общая) в origin не уходит")
+	}
+}
+
+func TestLandLocalFlagDoesNotPush(t *testing.T) {
+	dir, bare := landWithOrigin(t)
+	code, out, errs := run(newApp(), dir, "land", "Add f", "--seed", "--from", "1.1.35+35", "--local")
+	if code != 0 || strings.Contains(out, "push origin") {
+		t.Fatalf("%d %s %s", code, out, errs)
+	}
+	if remoteTip(bare, "dev") != "" {
+		t.Error("с --local ничего не уходит")
+	}
+}
+
+func TestLandPushFailureKeepsLocalResult(t *testing.T) {
+	dir, bare := landWithOrigin(t)
+	os.WriteFile(filepath.Join(bare, "hooks", "pre-receive"), []byte("#!/bin/sh\nexit 1\n"), 0o755)
+	code, out, errs := run(newApp(), dir, "land", "Add f", "--seed", "--from", "1.1.35+35")
+	if code != 0 || !strings.Contains(out, "push не удался") || !strings.Contains(out, "✓ Add f | v1.1.36+36.") {
+		t.Fatalf("%d %s %s", code, out, errs)
+	}
+	if !strings.HasPrefix(gitIn(t, dir, "log", "-1", "--format=%s", "dev"), "Add f | v1.1.36+36.") {
+		t.Error("локальный результат должен остаться")
+	}
+}

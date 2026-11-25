@@ -8,9 +8,10 @@ import (
 	"github.com/DrBopoH/sky-cli/internal/feature"
 	"github.com/DrBopoH/sky-cli/internal/land"
 	"github.com/DrBopoH/sky-cli/internal/repo"
+	"github.com/DrBopoH/sky-cli/internal/sync"
 )
 
-const landUsage = `sky land "резюме" [--module M [--chain a,b,c] | --seed] [--from R.B.C+T] [--dry]`
+const landUsage = `sky land "резюме" [--module M [--chain a,b,c] | --seed] [--from R.B.C+T] [--dry] [--local]`
 
 func landCommand() Command {
 	return Command{
@@ -25,6 +26,7 @@ func landCommand() Command {
 func runLand(a *App, env Env, args []string) error {
 	o := land.Options{Now: time.Now()}
 	var rest []string
+	local := false
 	for i := 0; i < len(args); i++ {
 		x := args[i]
 		val := func() (string, error) {
@@ -40,6 +42,8 @@ func runLand(a *App, env Env, args []string) error {
 			o.Seed = true
 		case "--dry":
 			o.Dry = true
+		case "--local":
+			local = true
 		case "--module":
 			o.Module, err = val()
 		case "--from":
@@ -81,10 +85,14 @@ func runLand(a *App, env Env, args []string) error {
 				if o.Dry {
 					fa = append(fa, "--dry")
 				}
+				if local {
+					fa = append(fa, "--local")
+				}
 				return runFix(a, env, fa)
 			}
 		}
 	}
+	before := sync.Tips(l.Root)
 	res, err := land.Run(o)
 	for _, ln := range res.Lines {
 		fmt.Fprintln(env.Out, ln)
@@ -97,5 +105,6 @@ func runLand(a *App, env Env, args []string) error {
 		return nil
 	}
 	fmt.Fprintf(env.Out, "✓ %s (HEAD: %s)\n", res.Message, res.Branch)
+	pushShared(env, l.Root, before, local)
 	return nil
 }
