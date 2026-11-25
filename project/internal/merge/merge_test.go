@@ -228,3 +228,58 @@ func TestMergeRefusals(t *testing.T) {
 		t.Fatalf("%v", err)
 	}
 }
+
+func TestMergeStaleTmpCleaned(t *testing.T) {
+	w := newWorld(t)
+	w.openPR("dev", "wip/1125-1005/s", pr.Options{Kind: "seed"})
+	w.me.git("branch", "tmp-merge-7", "dev")
+	res, err := Run(w.opts())
+	if err != nil {
+		t.Fatalf("%v\n%s", err, strings.Join(res.Lines, "\n"))
+	}
+	if w.me.git("branch", "--list", "tmp-merge-*") != "" {
+		t.Error("временная ветка прошлой попытки должна быть убрана")
+	}
+}
+
+func TestMergePushFailureRollsBack(t *testing.T) {
+	w := newWorld(t)
+	w.openPR("dev", "wip/1125-1005/r", pr.Options{Kind: "seed"})
+	hook := filepath.Join(w.bare, "hooks", "pre-receive")
+	os.WriteFile(hook, []byte("#!/bin/sh\nexit 1\n"), 0o755)
+	before := w.me.git("rev-parse", "dev")
+	_, err := Run(w.opts())
+	if err == nil || !strings.Contains(err.Error(), "возвращено как было") {
+		t.Fatalf("ожидался откат, err=%v", err)
+	}
+	if w.me.git("rev-parse", "dev") != before {
+		t.Error("dev должна вернуться")
+	}
+	if w.me.git("branch", "--list", "tmp-merge-*") != "" {
+		t.Error("временная ветка должна исчезнуть")
+	}
+	os.Remove(hook)
+	if _, err := Run(w.opts()); err != nil {
+		t.Fatalf("повтор после отката: %v", err)
+	}
+	if w.remote("dev") != w.me.git("rev-parse", "dev") {
+		t.Error("повтор должен дойти до origin")
+	}
+}
+
+func TestMergeAllClimbsToDev(t *testing.T) {
+	w := newWorld(t)
+	w.openPR("dev", "wip/1125-1005/a", pr.Options{Kind: "module", Module: "leaf", Chain: []string{"leaf"}})
+	o := w.opts()
+	o.All = true
+	res, err := Run(o)
+	if err != nil {
+		t.Fatalf("%v\n%s", err, strings.Join(res.Lines, "\n"))
+	}
+	if !strings.HasPrefix(w.me.git("log", "-1", "--format=%s", "dev"), "Add a | v1.1.") || w.remote("dev") != w.me.git("rev-parse", "dev") {
+		t.Errorf("dev после --all: %q", w.me.git("log", "-1", "--format=%s", "dev"))
+	}
+	if w.me.git("symbolic-ref", "--short", "HEAD") != "dev" {
+		t.Error("HEAD вернулся")
+	}
+}

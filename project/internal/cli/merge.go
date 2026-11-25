@@ -8,7 +8,7 @@ import (
 	"github.com/DrBopoH/sky-cli/internal/repo"
 )
 
-const mergeUsage = `sky merge <PR> [--dry] | sky merge --up "резюме" [--dry]`
+const mergeUsage = `sky merge <PR> [--all] [--dry] | sky merge --up "резюме" [--dry]`
 
 func mergeCommand() Command {
 	return Command{
@@ -29,6 +29,8 @@ func runMerge(a *App, env Env, args []string) error {
 			o.Dry = true
 		case x == "--up":
 			o.Up = true
+		case x == "--all":
+			o.All = true
 		case strings.HasPrefix(x, "--"):
 			return fmt.Errorf("неизвестный флаг «%s»: %s", x, mergeUsage)
 		default:
@@ -37,6 +39,9 @@ func runMerge(a *App, env Env, args []string) error {
 	}
 	if len(rest) != 1 {
 		return fmt.Errorf("нужен один аргумент (номер PR или резюме для --up): %s", mergeUsage)
+	}
+	if o.All && o.Up {
+		return fmt.Errorf("--all только с номером PR (--up и так сливает вверх): %s", mergeUsage)
 	}
 	if o.Up {
 		o.Summary = rest[0]

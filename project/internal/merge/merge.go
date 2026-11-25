@@ -14,15 +14,20 @@ import (
 	"github.com/DrBopoH/sky-cli/internal/ghx"
 	"github.com/DrBopoH/sky-cli/internal/gitx"
 	"github.com/DrBopoH/sky-cli/internal/land"
+	"github.com/DrBopoH/sky-cli/internal/modules"
 	"github.com/DrBopoH/sky-cli/internal/pr"
 	"github.com/DrBopoH/sky-cli/internal/sync"
 )
+
+// Dev — ветка разработки, куда доходит --all.
+const Dev = "dev"
 
 // Options — параметры одного вызова.
 type Options struct {
 	Root    string
 	PR      string // номер или адрес PR; пусто с Up
 	Up      bool   // слить ветку модуля, на которой стоит HEAD, в её родителя (без PR)
+	All     bool   // с PR на модуль: после squash довести слияние вверх по цепочке до dev
 	Summary string // для Up: резюме именованного коммита слияния
 	Dry     bool
 }
@@ -106,24 +111,65 @@ func (e *env) sync() error {
 	return nil
 }
 
-// push отправляет общие ветки, которые изменились или появились.
-func (e *env) push(before map[string]string) error {
+// snap — состояние общих веток до слияния: вершины и sky-state, чтобы вернуть всё как было.
+type snap struct {
+	refs   map[string]string
+	states map[string]string
+}
+
+func (e *env) snapshot() snap {
+	s := snap{refs: e.shared(), states: map[string]string{}}
+	for n := range s.refs {
+		s.states[n] = gitx.BranchConfig(e.o.Root, n, "sky-state")
+	}
+	return s
+}
+
+// push отправляет общие ветки, которые изменились или появились. Если ни одна ветка не ушла, а слияние не удалось,
+// локальное состояние возвращается как было (повторить можно сразу); если часть уже ушла, откат был бы хуже.
+func (e *env) push(before snap) error {
 	after := e.shared()
 	var names []string
 	for n, h := range after {
-		if before[n] != h {
+		if before.refs[n] != h {
 			names = append(names, n)
 		}
 	}
 	sort.Strings(names)
 	for _, n := range names {
 		if _, err := gitx.Run(e.o.Root, "push", "-u", sync.Remote, n); err != nil {
-			return fmt.Errorf("ветка %s изменена локально, но push не удался (повтори git push %s %s): %v", n, sync.Remote, sync.Remote, err)
+			if len(e.res.Pushed) == 0 {
+				e.rollback(before)
+				return fmt.Errorf("push ветки %s не удался, всё возвращено как было (повтори команду): %v", n, err)
+			}
+			return fmt.Errorf("ветка %s изменена локально, но push не удался (ушло: %s; повтори git push %s %s): %v", n, strings.Join(e.res.Pushed, ", "), sync.Remote, n, err)
 		}
 		e.res.Pushed = append(e.res.Pushed, n)
 		e.say("  push %s %s", sync.Remote, n)
 	}
 	return nil
+}
+
+// rollback возвращает общие ветки к снимку: новые удаляет, сдвинутые возвращает, sky-state восстанавливает.
+func (e *env) rollback(before snap) {
+	root := e.o.Root
+	e.restore()
+	for n, h := range e.shared() {
+		old, existed := before.refs[n]
+		switch {
+		case !existed:
+			gitx.Run(root, "branch", "-D", n)
+		case old != h && n == e.back:
+			gitx.Run(root, "reset", "-q", "--hard", old)
+		case old != h:
+			gitx.Run(root, "update-ref", "-m", "sky merge rollback", "refs/heads/"+n, old, h)
+		}
+	}
+	for n, st := range before.states {
+		if _, still := e.shared()[n]; still && st != "" && gitx.BranchConfig(root, n, "sky-state") != st {
+			gitx.Run(root, "config", "branch."+n+".sky-state", st)
+		}
+	}
 }
 
 func (e *env) restore() {
@@ -145,18 +191,28 @@ func (e *env) up() error {
 	if err := e.sync(); err != nil {
 		return err
 	}
-	before := e.shared()
+	before := e.snapshot()
 	r, err := land.Run(land.Options{Root: e.o.Root, Summary: e.o.Summary})
 	e.res.Lines = append(e.res.Lines, r.Lines...)
 	e.res.Message = r.Message
 	if err != nil {
+		e.rollback(before)
 		return err
 	}
 	if err := e.push(before); err != nil {
 		return err
 	}
 	e.restoreIfSwitched(r.Branch)
+	e.say("✓ %s", r.Message)
+	e.hintUp(r.Branch)
 	return nil
+}
+
+// hintUp подсказывает следующий шаг, если ветка модуля, куда всё легло, ещё не слита до dev.
+func (e *env) hintUp(branch string) {
+	if _, _, ok := modules.ParseBranch(branch); ok {
+		e.say("  дальше: ветка %s ждёт слияния вверх (на ней sky merge --up \"резюме\", либо в следующий раз sky merge <PR> --all)", branch)
+	}
 }
 
 // restoreIfSwitched возвращает HEAD на исходную ветку, если она ещё есть.
@@ -202,7 +258,12 @@ func (e *env) pull() error {
 		return fmt.Errorf("нет ветки %s в %s: PR ссылается на неё", p.Head, sync.Remote)
 	}
 	if gitx.OK(root, "rev-parse", "--verify", "-q", "refs/heads/"+tmp) {
-		return fmt.Errorf("осталась временная ветка %s от прошлой попытки: удали её (git branch -D %s) и повтори", tmp, tmp)
+		if e.back == tmp {
+			return fmt.Errorf("HEAD на временной ветке %s: перейди на другую ветку и повтори", tmp)
+		}
+		// служебная ветка прерванной попытки: пересоздаётся заново от origin
+		gitx.Run(root, "branch", "-D", tmp)
+		e.say("· временная ветка %s от прерванной попытки удалена", tmp)
 	}
 	if _, err := gitx.Run(root, "checkout", "-q", "-b", tmp, ref); err != nil {
 		return err
@@ -211,26 +272,36 @@ func (e *env) pull() error {
 		e.restore()
 		gitx.Run(root, "branch", "-D", tmp)
 	}()
-	before := e.shared()
-	var msg string
+	before := e.snapshot()
+	var msg, landed string
 	if t.Kind == "fix" {
 		r, err := fix.Run(fix.Options{Root: root, Summary: p.Title, Build: t.Build, Dry: e.o.Dry})
 		e.res.Lines = append(e.res.Lines, r.Lines...)
 		if err != nil {
+			e.rollback(before)
 			return err
 		}
-		msg = r.Message
+		msg, landed = r.Message, r.Branch
 	} else {
 		r, err := land.Run(land.Options{Root: root, Summary: p.Title, Module: t.Module, Chain: t.Chain, Seed: t.Kind == "seed", Dry: e.o.Dry})
 		e.res.Lines = append(e.res.Lines, r.Lines...)
 		if err != nil {
+			e.rollback(before)
 			return err
 		}
-		msg = r.Message
+		msg, landed = r.Message, r.Branch
 	}
 	e.res.Message = msg
 	if e.o.Dry {
 		return nil
+	}
+	if e.o.All {
+		if msg, err = e.climb(p.Title); err != nil {
+			e.rollback(before)
+			return err
+		}
+		landed = Dev
+		e.res.Message = msg
 	}
 	if err := e.push(before); err != nil {
 		return err
@@ -240,7 +311,28 @@ func (e *env) pull() error {
 		return fmt.Errorf("слияние выполнено и запушено, но PR не закрыт: %v", err)
 	}
 	e.say("✓ PR #%d закрыт: %s", p.Number, msg)
+	e.hintUp(landed)
 	return nil
+}
+
+// climb доводит слияние от ветки модуля, на которой стоит HEAD, вверх по цепочке до dev. Возвращает сообщение последнего слияния.
+func (e *env) climb(summary string) (string, error) {
+	var msg string
+	for {
+		cur := strings.TrimSpace(gitx.Try(e.o.Root, "symbolic-ref", "-q", "--short", "HEAD"))
+		if _, _, ok := modules.ParseBranch(cur); !ok {
+			if msg == "" {
+				return "", fmt.Errorf("--all нужен для PR на модуль: слитое лежит не в ветке модуля (%s)", cur)
+			}
+			return msg, nil
+		}
+		r, err := land.Run(land.Options{Root: e.o.Root, Summary: summary})
+		e.res.Lines = append(e.res.Lines, r.Lines...)
+		if err != nil {
+			return "", err
+		}
+		msg = r.Message
+	}
 }
 
 func describe(t pr.Target) string {
