@@ -3,9 +3,14 @@ package graph
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 )
+
+// Path — где реестр лежит в репозитории.
+const Path = "docs/PROJECT-GRAPH.md"
 
 // Graph — модули и их прямые зависимости.
 type Graph struct {
@@ -145,4 +150,42 @@ func (g Graph) Check(chain []string) error {
 		prev = m
 	}
 	return nil
+}
+
+// Load читает реестр из корня репозитория.
+func Load(root string) (Graph, error) {
+	b, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(Path)))
+	if err != nil {
+		return Graph{}, fmt.Errorf("нет графа проекта %s: его ведёт агент (см. .sky/readme/readme.md)", Path)
+	}
+	return Parse(string(b))
+}
+
+// Resolve выбирает цепочку до модуля: заданную (проверяет по графу) или единственную возможную.
+func (g Graph) Resolve(module string, chain []string) ([]string, error) {
+	if len(chain) > 0 {
+		if chain[len(chain)-1] != module {
+			return nil, fmt.Errorf("цепочка должна кончаться модулем «%s»", module)
+		}
+		return chain, g.Check(chain)
+	}
+	cs, err := g.Chains(module)
+	if err != nil {
+		return nil, err
+	}
+	switch len(cs) {
+	case 0:
+		return nil, fmt.Errorf("от зерна до «%s» нет пути в графе", module)
+	case 1:
+		return cs[0], nil
+	}
+	var b strings.Builder
+	for i, c := range cs {
+		if i == 8 {
+			fmt.Fprintf(&b, "\n  … ещё %d", len(cs)-8)
+			break
+		}
+		fmt.Fprintf(&b, "\n  --chain %s", strings.Join(c, ","))
+	}
+	return nil, fmt.Errorf("до «%s» несколько цепочек, задай одну:%s", module, b.String())
 }

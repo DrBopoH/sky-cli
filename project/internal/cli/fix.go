@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/DrBopoH/sky-cli/internal/feature"
 	"github.com/DrBopoH/sky-cli/internal/fix"
 	"github.com/DrBopoH/sky-cli/internal/repo"
 )
@@ -48,6 +49,12 @@ func runFix(a *App, env Env, args []string) error {
 		return err
 	}
 	o.Root = l.Root
+	if o.Build == "" {
+		// ветка заведена sky feature --fix: исправляем ту сборку, от которой она отведена
+		if _, t, ok := feature.Current(l.Root); ok && t.Kind == feature.Fix {
+			o.Build = t.Base
+		}
+	}
 	res, err := fix.Run(o)
 	for _, ln := range res.Lines {
 		fmt.Fprintln(env.Out, ln)

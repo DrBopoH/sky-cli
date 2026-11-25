@@ -25,6 +25,8 @@ var (
 	summaryBuildRaw string
 	//go:embed text/fix-summary.txt
 	summaryFixRaw string
+	//go:embed text/feature-summary.txt
+	summaryFeatureRaw string
 )
 
 var (
@@ -37,4 +39,5 @@ var (
 	summaryLand     = strings.TrimSpace(summaryLandRaw)
 	summaryBuild    = strings.TrimSpace(summaryBuildRaw)
 	summaryFix      = strings.TrimSpace(summaryFixRaw)
+	summaryFeature  = strings.TrimSpace(summaryFeatureRaw)
 )

@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/DrBopoH/sky-cli/internal/feature"
 	"github.com/DrBopoH/sky-cli/internal/land"
 	"github.com/DrBopoH/sky-cli/internal/repo"
 )
@@ -67,6 +68,23 @@ func runLand(a *App, env Env, args []string) error {
 		return err
 	}
 	o.Root = l.Root
+	if o.Module == "" && len(o.Chain) == 0 && !o.Seed {
+		// цель запомнена sky feature: флаги не нужны
+		if _, t, ok := feature.Current(l.Root); ok {
+			switch t.Kind {
+			case feature.Module:
+				o.Module, o.Chain = t.Module, t.Chain
+			case feature.Seed:
+				o.Seed = true
+			case feature.Fix:
+				fa := []string{o.Summary}
+				if o.Dry {
+					fa = append(fa, "--dry")
+				}
+				return runFix(a, env, fa)
+			}
+		}
+	}
 	res, err := land.Run(o)
 	for _, ln := range res.Lines {
 		fmt.Fprintln(env.Out, ln)

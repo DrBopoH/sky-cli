@@ -5,8 +5,6 @@ package land
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -21,7 +19,7 @@ import (
 
 const (
 	Dev       = "dev"
-	GraphPath = "docs/PROJECT-GRAPH.md"
+	GraphPath = graph.Path
 	MaxLen    = 72
 )
 
@@ -151,40 +149,10 @@ func (e *env) validate() error {
 	return nil
 }
 
-func (e *env) loadGraph() (graph.Graph, error) {
-	b, err := os.ReadFile(filepath.Join(e.o.Root, filepath.FromSlash(GraphPath)))
-	if err != nil {
-		return graph.Graph{}, fmt.Errorf("нет графа проекта %s: его ведёт агент (см. .sky/readme/readme.md)", GraphPath)
-	}
-	return graph.Parse(string(b))
-}
+func (e *env) loadGraph() (graph.Graph, error) { return graph.Load(e.o.Root) }
 
 func (e *env) resolveChain(g graph.Graph) ([]string, error) {
-	if len(e.o.Chain) > 0 {
-		if e.o.Chain[len(e.o.Chain)-1] != e.o.Module {
-			return nil, fmt.Errorf("цепочка должна кончаться модулем «%s»", e.o.Module)
-		}
-		return e.o.Chain, g.Check(e.o.Chain)
-	}
-	cs, err := g.Chains(e.o.Module)
-	if err != nil {
-		return nil, err
-	}
-	switch len(cs) {
-	case 0:
-		return nil, fmt.Errorf("от зерна до «%s» нет пути в графе", e.o.Module)
-	case 1:
-		return cs[0], nil
-	}
-	var b strings.Builder
-	for i, c := range cs {
-		if i == 8 {
-			fmt.Fprintf(&b, "\n  … ещё %d", len(cs)-8)
-			break
-		}
-		fmt.Fprintf(&b, "\n  --chain %s", strings.Join(c, ","))
-	}
-	return nil, fmt.Errorf("до «%s» несколько цепочек, задай одну:%s", e.o.Module, b.String())
+	return g.Resolve(e.o.Module, e.o.Chain)
 }
 
 // Run выполняет land по параметрам.

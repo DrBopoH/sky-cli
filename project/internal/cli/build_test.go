@@ -116,3 +116,43 @@ func TestFixThroughConsole(t *testing.T) {
 		t.Errorf("без резюме: %d %q", code, errs)
 	}
 }
+
+func TestFeatureRemembersTargetForLandAndFix(t *testing.T) {
+	dir := buildRepo(t, "")
+	commitFile := func(name string) {
+		os.WriteFile(filepath.Join(dir, name), []byte(name+"\n"), 0o644)
+		gitIn(t, dir, "add", name)
+		gitIn(t, dir, "commit", "-q", "-m", "feat: "+name)
+	}
+	if code, _, errs := run(newApp(), dir, "feature", "Bad Name"); code != 1 || errs == "" {
+		t.Fatalf("плохое имя: %d %q", code, errs)
+	}
+	code, out, errs := run(newApp(), dir, "feature", "add-x", "--seed")
+	if code != 0 || !strings.Contains(out, "wip/") {
+		t.Fatalf("feature: %d %s %s", code, out, errs)
+	}
+	if b := gitIn(t, dir, "symbolic-ref", "--short", "HEAD"); !strings.HasPrefix(b, "wip/") || !strings.HasSuffix(b, "/add-x") {
+		t.Fatalf("ветка: %s", b)
+	}
+	commitFile("x.txt")
+	// land без флагов берёт цель из ветки
+	code, out, errs = run(newApp(), dir, "land", "Add x")
+	if code != 0 || !strings.Contains(out, "✓ Add x | v1.1.2+2.") {
+		t.Fatalf("land: %d %s %s", code, out, errs)
+	}
+	if code, _, errs := run(newApp(), dir, "build"); code != 0 {
+		t.Fatalf("build: %s", errs)
+	}
+	code, out, errs = run(newApp(), dir, "feature", "hot", "--fix")
+	if code != 0 || !strings.Contains(out, "build/") {
+		t.Fatalf("feature --fix: %d %s %s", code, out, errs)
+	}
+	commitFile("h.txt")
+	code, out, errs = run(newApp(), dir, "land", "Fix hot")
+	if code != 0 || !strings.Contains(out, "✓ Fix hot | v1.a1-1.2+3.") {
+		t.Fatalf("land на ветке исправления: %d %s %s", code, out, errs)
+	}
+	if b := gitIn(t, dir, "symbolic-ref", "--short", "HEAD"); !strings.HasPrefix(b, "build/") {
+		t.Fatalf("HEAD после исправления: %s", b)
+	}
+}
