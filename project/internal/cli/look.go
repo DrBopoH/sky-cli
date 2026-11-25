@@ -58,9 +58,11 @@ func refreshForyou(l repo.Layout) ([]string, error) {
 		gen[i] = repo.Generated{Name: f.Name, Content: []byte(f.Content)}
 		names[i] = f.Name
 	}
-	// archive.md пишет sky up; обновление foryou его сохраняет
-	if b, err := os.ReadFile(filepath.Join(l.Foryou, "archive.md")); err == nil {
-		gen = append(gen, repo.Generated{Name: "archive.md", Content: b})
+	// archive.md пишет sky up, build.md — sky build; обновление foryou их сохраняет
+	for _, keep := range []string{"archive.md", "build.md"} {
+		if b, err := os.ReadFile(filepath.Join(l.Foryou, keep)); err == nil {
+			gen = append(gen, repo.Generated{Name: keep, Content: b})
+		}
 	}
 	if _, err := l.SyncForyou(gen); err != nil {
 		return nil, err

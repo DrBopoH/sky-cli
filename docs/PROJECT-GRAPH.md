@@ -1,7 +1,7 @@
 # PROJECT-GRAPH — реестр модулей sky
 
 Автор: Δρ.ΒοροΗ. · MorangTong creative studio
-Назначение: единый реестр систем проекта и связей между ними. Имена модулей отсюда используются в названиях веток `ММДД-ЧЧММ/модуль` (MT-git-reglament, 3.4).
+Назначение: единый реестр систем проекта и связей между ними. Имена модулей отсюда используются в названиях веток `модуль/ММДД-ЧЧММ` (MT-git-reglament, 3.4).
 
 ## 1. Правила реестра
 
@@ -21,17 +21,19 @@
 | commit | сообщения и параметры коммитов | — |
 | conf | конфигурация | — |
 | version | версии | — |
-| named | версия именованного коммита: разбор и запись сообщения | — |
+| named | версия именованного коммита и сборки: разбор и запись сообщения | — |
 | graph | чтение реестра модулей, цепочки от зерна | — |
 | readme | статические тексты (встроенные) | — |
 | repo | состояние репозитория | gitx |
 | pack | упаковка архивов | gitx, guard |
 | look | просмотр состояния и журнала | conf, gitx, history |
-| land | перенос фичи в граф веток по регламенту, версия по истории dev | gitx, graph, named |
+| vhist | версия из истории git: последний именованный коммит dev, сборки, база после сборки | gitx, named |
+| land | перенос фичи в граф веток по регламенту, версия по истории dev | gitx, graph, named, vhist |
+| build | сборка: команды из конфига, ветка `build/ММДД-ЧЧММ`, хвост | conf, gitx, named, vhist |
 | apply | план эффектов, проверка, запуск, откат | commit, gitx, guard, history, notation |
 | ops | патч-операции, адаптер плана | apply, commit, guard, notation |
 | work | применение патча, откат | apply, gitx, guard, history, pack, repo |
-| cli | команды и оркестрация | apply, commit, conf, history, land, look, pack, readme, repo, version, work |
+| cli | команды и оркестрация | apply, build, commit, conf, history, land, look, pack, readme, repo, version, work |
 | main | зерно: сборка и запуск | cli, ops, readme |
 
 ## 3. Уровни
@@ -39,8 +41,8 @@
 | Уровень | Модули |
 |---|---|
 | 0 (листья) | notation, guard, history, gitx, commit, conf, version, readme, named, graph |
-| 1 | repo, pack, look, apply, land |
-| 2 | ops, work |
+| 1 | repo, pack, look, apply, vhist |
+| 2 | ops, work, land, build |
 | 3 | cli |
 | 4 | main (зерно) |
 

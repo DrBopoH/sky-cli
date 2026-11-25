@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/DrBopoH/sky-cli/internal/build"
 )
 
 const graphDoc = `# G
@@ -118,7 +120,7 @@ func TestModuleChainAndMergeUp(t *testing.T) {
 	if !strings.HasPrefix(res.Message, "Add mid part | v1.") || strings.Contains(res.Message, "+") {
 		t.Fatal(res.Message)
 	}
-	br := "1125-1020/mid"
+	br := "mid/1125-1020"
 	if res.Branch != br || r.git("config", "branch."+br+".sky-parent") != Dev || r.git("config", "branch."+br+".sky-state") != "open" {
 		t.Fatalf("branch %q", res.Branch)
 	}
@@ -156,14 +158,14 @@ func TestParallelBranchesRegulationExample(t *testing.T) {
 	if _, err := r.land(Options{Summary: "Part b", Module: "b", From: "1.1.27+27"}); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(r.subject("1125-1020/a"), "| v28.") || !strings.Contains(r.subject("1125-1020/b"), "| v28.") {
-		t.Fatalf("на ветках одинаковые номера: %s / %s", r.subject("1125-1020/a"), r.subject("1125-1020/b"))
+	if !strings.Contains(r.subject("a/1125-1020"), "| v28.") || !strings.Contains(r.subject("b/1125-1020"), "| v28.") {
+		t.Fatalf("на ветках одинаковые номера: %s / %s", r.subject("a/1125-1020"), r.subject("b/1125-1020"))
 	}
-	r.git("checkout", "-q", "1125-1020/a")
+	r.git("checkout", "-q", "a/1125-1020")
 	if res, err := r.land(Options{Summary: "Merge a", From: "1.1.27+27"}); err != nil || !strings.HasPrefix(res.Message, "Merge a | v1.1.29+29.") {
 		t.Fatalf("%q %v", res.Message, err)
 	}
-	r.git("checkout", "-q", "1125-1020/b")
+	r.git("checkout", "-q", "b/1125-1020")
 	if res, err := r.land(Options{Summary: "Merge b", From: "1.1.27+27"}); err != nil || !strings.HasPrefix(res.Message, "Merge b | v1.1.31+31.") {
 		t.Fatalf("%q %v", res.Message, err)
 	}
@@ -175,7 +177,7 @@ func TestNestedChainBottomUp(t *testing.T) {
 	if _, err := r.land(Options{Summary: "Leaf part", Module: "leaf", Chain: []string{"mid", "leaf"}, From: "1.1.0+0"}); err != nil {
 		t.Fatal(err)
 	}
-	leaf, mid := "1125-1020/leaf", "1125-1020/mid"
+	leaf, mid := "leaf/1125-1020", "mid/1125-1020"
 	if r.git("config", "branch."+leaf+".sky-parent") != mid || r.git("config", "branch."+mid+".sky-parent") != Dev {
 		t.Fatal("ветки вложены по цепочке")
 	}
@@ -223,7 +225,7 @@ func TestAmbiguousChainAndErrors(t *testing.T) {
 		}
 	}
 	// ничего не создано
-	if r.git("branch", "--list", "1125*") != "" {
+	if r.git("branch", "--list", "*/1125-1020") != "" {
 		t.Fatal("отказ ничего не меняет")
 	}
 }
@@ -248,7 +250,7 @@ func TestDryChangesNothing(t *testing.T) {
 	if err != nil || res.Message == "" || len(res.Lines) == 0 {
 		t.Fatalf("%+v %v", res, err)
 	}
-	if r.git("rev-parse", Dev) != before || r.git("branch", "--list", "1125*") != "" || r.git("symbolic-ref", "--short", "HEAD") != "f" {
+	if r.git("rev-parse", Dev) != before || r.git("branch", "--list", "*/1125-1020") != "" || r.git("symbolic-ref", "--short", "HEAD") != "f" {
 		t.Fatal("dry ничего не меняет")
 	}
 }
@@ -269,5 +271,75 @@ func TestConflictRestores(t *testing.T) {
 	}
 	if r.git("rev-parse", Dev) != before || r.git("symbolic-ref", "--short", "HEAD") != "f2" || r.git("status", "--porcelain") != "" {
 		t.Fatal("после конфликта всё как было")
+	}
+}
+
+func TestAfterBuildNextIsBPlusOne(t *testing.T) {
+	r := newRepo(t)
+	r.feature("one", "x.txt")
+	if _, err := r.land(Options{Summary: "Add one", Seed: true, From: "1.1.28+28"}); err != nil {
+		t.Fatal(err)
+	}
+	r.git("checkout", "-q", Dev)
+	if _, err := build.Exec(build.Options{Root: r.dir, From: "1.1.28+28", Now: t0}); err != nil {
+		t.Fatal(err)
+	}
+	// после сборки: B+1, C=1, T продолжается
+	r.feature("two", "y.txt")
+	res, err := r.land(Options{Summary: "Add two", Seed: true, From: "1.1.28+28"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(res.Message, " | v1.2.1+30.") {
+		t.Errorf("после сборки ждали v1.2.1+30, получено %s", res.Message)
+	}
+}
+
+func TestAfterBuildModuleMerge(t *testing.T) {
+	r := newRepo(t)
+	r.feature("one", "x.txt")
+	if _, err := r.land(Options{Summary: "Add one", Seed: true, From: "1.1.28+28"}); err != nil {
+		t.Fatal(err)
+	}
+	r.git("checkout", "-q", Dev)
+	if _, err := build.Exec(build.Options{Root: r.dir, From: "1.1.28+28", Now: t0}); err != nil {
+		t.Fatal(err)
+	}
+	r.feature("f", "m.txt")
+	if _, err := r.land(Options{Summary: "Add m", Module: "mid", Chain: []string{"mid"}, From: "1.1.28+28", Now: t0.Add(time.Minute)}); err != nil {
+		t.Fatal(err)
+	}
+	res, err := r.land(Options{Summary: "Leaf done", From: "1.1.28+28", Now: t0.Add(time.Minute)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(res.Message, " | v1.2.2+31.") {
+		t.Errorf("ждали v1.2.2+31, получено %s", res.Message)
+	}
+}
+
+func TestBuildAfterForkPointKeepsOldCount(t *testing.T) {
+	// ветка модуля открыта до сборки, источник сборки новее её точки ответвления: счёт ветки не сбрасывается
+	r := newRepo(t)
+	r.commit("n.txt", "n\n", "Add n | v1.1.28+28.aaa1111")
+	r.feature("f", "m.txt")
+	if _, err := r.land(Options{Summary: "Add m", Module: "mid", Chain: []string{"mid"}}); err != nil {
+		t.Fatal(err)
+	}
+	r.feature("one", "x.txt")
+	if _, err := r.land(Options{Summary: "Add one", Seed: true}); err != nil {
+		t.Fatal(err)
+	}
+	r.git("checkout", "-q", Dev)
+	if _, err := build.Exec(build.Options{Root: r.dir, Now: t0.Add(time.Minute)}); err != nil {
+		t.Fatal(err)
+	}
+	r.feature("g", "k.txt")
+	res, err := r.land(Options{Summary: "Add k", Module: "mid", Chain: []string{"mid"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(res.Message, " | v30.") {
+		t.Errorf("ждали v30.hash (28 + 2 в ветке), получено %s", res.Message)
 	}
 }

@@ -9,19 +9,36 @@ import (
 )
 
 // Version — версия именованного коммита. Full: R, B, C, T заданы (dev); иначе задан только C (ветка модуля).
+// Сборка: State — буква состояния (a, b, s, m), B — номер сборки, F — номер исправления (0 — сама сборка).
 type Version struct {
 	Full       bool
 	R, B, C, T int
+	State      byte
+	F          int
 	Hash       string
 }
+
+// IsBuild сообщает, что это версия сборки (v1.a1.29+29, v1.a1-2.29+31).
+func (v Version) IsBuild() bool { return v.State != 0 }
 
 // Grep — расширенное регулярное выражение для git log --grep -E: сообщение оканчивается версией именованного коммита.
 const Grep = ` [|] v([0-9]+[.][0-9]+[.][0-9]+[+][0-9]+|[0-9]+)[.][0-9a-f]{7}$`
 
 var msgRe = regexp.MustCompile(`^(.*) \| v(?:(\d+)\.(\d+)\.(\d+)\+(\d+)|(\d+))\.([0-9a-f]{7})$`)
 
+var buildRe = regexp.MustCompile(`^(.*) \| v(\d+)\.([absm])(\d+)(?:-(\d+))?\.(\d+)\+(\d+)\.([0-9a-f]{7})$`)
+
 // Parse разбирает первую строку сообщения коммита; ok=false, если коммит не именованный.
 func Parse(subject string) (summary string, v Version, ok bool) {
+	if b := buildRe.FindStringSubmatch(subject); b != nil {
+		v = Version{Full: true, State: b[3][0], Hash: b[8]}
+		v.R, _ = strconv.Atoi(b[2])
+		v.B, _ = strconv.Atoi(b[4])
+		v.F, _ = strconv.Atoi(b[5])
+		v.C, _ = strconv.Atoi(b[6])
+		v.T, _ = strconv.Atoi(b[7])
+		return b[1], v, true
+	}
 	m := msgRe.FindStringSubmatch(subject)
 	if m == nil {
 		return "", Version{}, false
@@ -41,6 +58,13 @@ func Parse(subject string) (summary string, v Version, ok bool) {
 
 // String — версия в записи сообщения: v1.1.29+29.def5678 или v28.abc1234.
 func (v Version) String() string {
+	if v.IsBuild() {
+		f := ""
+		if v.F > 0 {
+			f = fmt.Sprintf("-%d", v.F)
+		}
+		return fmt.Sprintf("v%d.%c%d%s.%d+%d.%s", v.R, v.State, v.B, f, v.C, v.T, v.Hash)
+	}
 	if v.Full {
 		return fmt.Sprintf("v%d.%d.%d+%d.%s", v.R, v.B, v.C, v.T, v.Hash)
 	}

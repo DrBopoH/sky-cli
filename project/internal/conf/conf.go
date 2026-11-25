@@ -15,10 +15,17 @@ const (
 	DefaultInbox = "~/Downloads"
 )
 
+// BuildPoint — одна точка сборки: папка от корня репозитория и команда, которая в ней запускается.
+type BuildPoint struct {
+	Dir string // нормализованная, с «/» на конце; «./» — корень репозитория
+	Cmd string
+}
+
 type Conf struct {
-	Scope      []string // папки проекта от корня репозитория
-	Inbox      string   // откуда sky забирает patch*.zip
-	Regulation string   // необязательная ссылка на регламент; sky её не загружает
+	Scope      []string     // папки проекта от корня репозитория
+	Build      []BuildPoint // точки сборки по порядку; пусто — команд сборки нет
+	Inbox      string       // откуда sky забирает patch*.zip
+	Regulation string       // необязательная ссылка на регламент; sky её не загружает
 }
 
 func Default() Conf {
@@ -35,6 +42,9 @@ func Render(c Conf) string {
 	}
 	var b strings.Builder
 	fmt.Fprintf(&b, "%s\nscope = [%s]\ninbox = %s\n%s\n", header, strings.Join(c.Scope, ", "), c.Inbox, reg)
+	for _, p := range c.Build {
+		fmt.Fprintf(&b, "build = %s %s\n", p.Dir, p.Cmd)
+	}
 	return b.String()
 }
 
@@ -67,6 +77,17 @@ func Parse(src string) (Conf, error) {
 				return c, at(fmt.Errorf("inbox пуст"))
 			}
 			c.Inbox = val
+		case "build":
+			dir, cmd, ok := strings.Cut(val, " ")
+			cmd = strings.TrimSpace(cmd)
+			if !ok || cmd == "" {
+				return c, at(fmt.Errorf("build = <папка> <команда>, например build = backend/ go build ./..."))
+			}
+			d, err := normPath(dir)
+			if err != nil {
+				return c, at(err)
+			}
+			c.Build = append(c.Build, BuildPoint{Dir: d, Cmd: cmd})
 		case "regulation":
 			if !strings.HasPrefix(val, "https://") && !strings.HasPrefix(val, "http://") {
 				return c, at(fmt.Errorf("regulation — ссылка вида https://…"))

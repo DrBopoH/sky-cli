@@ -65,3 +65,26 @@ func TestSectionsAreRejected(t *testing.T) {
 		}
 	}
 }
+
+func TestBuildPointsRoundTrip(t *testing.T) {
+	c, err := Parse("build = backend go build ./...\nbuild = frontend/ bun run build\nbuild = . make\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []BuildPoint{{"backend/", "go build ./..."}, {"frontend/", "bun run build"}, {"./", "make"}}
+	if !reflect.DeepEqual(c.Build, want) {
+		t.Fatalf("got %v", c.Build)
+	}
+	c2, err := Parse(Render(c))
+	if err != nil || !reflect.DeepEqual(c2.Build, want) {
+		t.Fatalf("round trip: %v %v", c2.Build, err)
+	}
+}
+
+func TestBuildPointRejects(t *testing.T) {
+	for _, in := range []string{"build = backend", "build = ../x make", "build =", "build = .sky x"} {
+		if _, err := Parse(in + "\n"); err == nil {
+			t.Errorf("%q принят", in)
+		}
+	}
+}

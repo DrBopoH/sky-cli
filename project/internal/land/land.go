@@ -16,6 +16,7 @@ import (
 	"github.com/DrBopoH/sky-cli/internal/gitx"
 	"github.com/DrBopoH/sky-cli/internal/graph"
 	"github.com/DrBopoH/sky-cli/internal/named"
+	"github.com/DrBopoH/sky-cli/internal/vhist"
 )
 
 const (
@@ -43,7 +44,7 @@ type Result struct {
 	Branch  string // ветка, на которой остался HEAD
 }
 
-var branchRe = regexp.MustCompile(`^(\d{4}-\d{4})/([^/]+)$`)
+var branchRe = regexp.MustCompile(`^([^/]+)/(\d{4}-\d{4})$`)
 
 type env struct {
 	o   Options
@@ -68,24 +69,9 @@ func (e *env) exists(branch string) bool {
 
 func (e *env) short(rev string) string { return e.try("rev-parse", "--short=7", rev) }
 
-// base — точка отсчёта, пока в dev нет именованных коммитов.
-func (e *env) base() (named.Version, error) {
-	if e.o.From == "" {
-		return named.Version{Full: true, R: 1, B: 1}, nil
-	}
-	return named.ParseBase(e.o.From)
-}
-
-// lastNamed — последний именованный коммит первой линии rev; нет такого — точка отсчёта.
+// lastNamed — версия, от которой считается следующее изменение (vhist.Effective).
 func (e *env) lastNamed(rev string) (named.Version, bool, error) {
-	s := e.try("log", "-1", "--first-parent", "-E", "--grep="+named.Grep, "--format=%s", rev)
-	if s != "" {
-		if _, v, ok := named.Parse(s); ok && v.Full {
-			return v, true, nil
-		}
-	}
-	b, err := e.base()
-	return b, false, err
+	return vhist.H{Root: e.o.Root, From: e.o.From}.Effective(rev)
 }
 
 func (e *env) count(from, to string) int {
@@ -116,7 +102,7 @@ func (e *env) findOpen(module, parent string) string {
 	out := e.try("for-each-ref", "--format=%(refname:short)", "refs/heads/")
 	for _, b := range strings.Split(out, "\n") {
 		m := branchRe.FindStringSubmatch(b)
-		if m == nil || m[2] != module {
+		if m == nil || m[1] != module {
 			continue
 		}
 		if e.cfg(b, "sky-state") == "open" && e.cfg(b, "sky-parent") == parent {
@@ -136,7 +122,7 @@ func (e *env) plan(chain []string) ([]step, error) {
 			parent = b
 			continue
 		}
-		name := stamp + "/" + m
+		name := m + "/" + stamp
 		if e.exists(name) {
 			return nil, fmt.Errorf("ветка %s уже есть и не открыта для этой цепочки: подожди минуту или переименуй её", name)
 		}
