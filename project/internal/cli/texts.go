@@ -31,6 +31,10 @@ var (
 	summaryModulesRaw string
 	//go:embed text/publish-summary.txt
 	summaryPublishRaw string
+	//go:embed text/pr-summary.txt
+	summaryPrRaw string
+	//go:embed text/sync-summary.txt
+	summarySyncRaw string
 )
 
 var (
@@ -46,4 +50,6 @@ var (
 	summaryFeature  = strings.TrimSpace(summaryFeatureRaw)
 	summaryModules  = strings.TrimSpace(summaryModulesRaw)
 	summaryPublish  = strings.TrimSpace(summaryPublishRaw)
+	summaryPr       = strings.TrimSpace(summaryPrRaw)
+	summarySync     = strings.TrimSpace(summarySyncRaw)
 )

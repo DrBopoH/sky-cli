@@ -192,3 +192,28 @@ func TestModulesAndPublishThroughConsole(t *testing.T) {
 		t.Errorf("main: %q", got)
 	}
 }
+
+func TestPrNeedsFeatureBranch(t *testing.T) {
+	dir := buildRepo(t, "")
+	code, _, errs := run(newApp(), dir, "pr", "Add f")
+	if code == 0 || !strings.Contains(errs, "wip/") {
+		t.Fatalf("на dev pr не работает: %d %s", code, errs)
+	}
+	if code, _, _ := run(newApp(), dir, "pr"); code == 0 {
+		t.Fatal("нужно резюме")
+	}
+	gitIn(t, dir, "switch", "-q", "-c", "wip/1125-1005/x")
+	if code, _, errs := run(newApp(), dir, "pr", "Add f"); code == 0 || !strings.Contains(errs, "sky feature") {
+		t.Fatalf("ветка не заведена sky feature: %d %s", code, errs)
+	}
+}
+
+func TestSyncNeedsRemote(t *testing.T) {
+	dir := buildRepo(t, "")
+	if code, _, errs := run(newApp(), dir, "sync"); code == 0 || !strings.Contains(errs, "нет удалённого") {
+		t.Fatalf("%d %s", code, errs)
+	}
+	if code, _, _ := run(newApp(), dir, "sync", "x"); code == 0 {
+		t.Fatal("лишний аргумент")
+	}
+}

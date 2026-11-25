@@ -21,7 +21,7 @@
 | commit | сообщения и параметры коммитов | — |
 | conf | конфигурация | — |
 | version | версии | — |
-| named | версия именованного коммита и сборки: разбор и запись сообщения | — |
+| named | версия именованного коммита и сборки: разбор и запись сообщения, проверка резюме | — |
 | graph | чтение реестра модулей, проверка цикла, уровни, цепочки от зерна, выбор цепочки | — |
 | readme | статические тексты (встроенные) | — |
 | repo | состояние репозитория, заведение `dev` | gitx |
@@ -34,10 +34,12 @@
 | feature | локальная ветка фичи `wip/ММДД-ЧЧММ/имя`, цель ветки в git config | gitx, graph, vhist |
 | fix | исправления сборки: squash на ветку сборки с версией `R.sB-F.C+T` | gitx, named, vhist |
 | publish | публикация сборки в `main` одним коммитом | gitx, named, vhist |
+| pr | push wip-ветки и pull request через gh (R1) | gitx, named |
+| sync | подтягивание общих веток из origin (R2) | gitx, modules, vhist |
 | apply | план эффектов, проверка, запуск, откат | commit, gitx, guard, history, notation |
 | ops | патч-операции, адаптер плана | apply, commit, guard, notation |
 | work | применение патча, откат | apply, gitx, guard, history, pack, repo |
-| cli | команды и оркестрация | apply, build, commit, conf, feature, fix, history, land, look, modules, pack, publish, readme, repo, version, work |
+| cli | команды и оркестрация | apply, build, commit, conf, feature, fix, history, land, look, modules, pack, pr, publish, readme, repo, sync, version, work |
 | main | зерно: сборка и запуск | cli, ops, readme |
 
 ## 3. Уровни
@@ -46,7 +48,7 @@
 |---|---|
 | 0 (листья) | notation, guard, history, gitx, commit, conf, version, readme, named, graph |
 | 1 | repo, pack, look, apply, vhist, modules |
-| 2 | ops, work, land, build, fix, feature, publish |
+| 2 | ops, work, land, build, fix, feature, publish, pr, sync |
 | 3 | cli |
 | 4 | main (зерно) |
 
