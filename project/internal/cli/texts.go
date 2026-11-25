@@ -19,6 +19,8 @@ var (
 	summaryInitRaw string
 	//go:embed text/rollback-summary.txt
 	summaryRollbackRaw string
+	//go:embed text/land-summary.txt
+	summaryLandRaw string
 )
 
 var (
@@ -28,4 +30,5 @@ var (
 	summaryUp       = strings.TrimSpace(summaryUpRaw)
 	summaryInit     = strings.TrimSpace(summaryInitRaw)
 	summaryRollback = strings.TrimSpace(summaryRollbackRaw)
+	summaryLand     = strings.TrimSpace(summaryLandRaw)
 )
