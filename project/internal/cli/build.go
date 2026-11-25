@@ -10,7 +10,7 @@ import (
 	"github.com/DrBopoH/sky-cli/internal/repo"
 )
 
-const buildUsage = `sky build [a|b|s|m] ["название"] [--dry] [--from R.B.C+T]`
+const buildUsage = `sky build [a|b|s|m] ["название"] [--dry] [--parallel] [--from R.B.C+T]`
 
 func buildCommand() Command {
 	return Command{
@@ -29,6 +29,8 @@ func runBuild(a *App, env Env, args []string) error {
 		switch x := args[i]; {
 		case x == "--dry":
 			o.Dry = true
+		case x == "--parallel":
+			o.Parallel = true
 		case x == "--from":
 			if i+1 >= len(args) {
 				return fmt.Errorf("--from требует значение: %s", buildUsage)

@@ -219,3 +219,72 @@ func TestBuildVersionInEnv(t *testing.T) {
 		t.Errorf("SKY_BUILD_VERSION = %q", b)
 	}
 }
+
+func TestBuildPushesBranchToOrigin(t *testing.T) {
+	r := newRepo(t)
+	bare := filepath.Join(t.TempDir(), "o.git")
+	if out, err := exec.Command("git", "init", "-q", "--bare", bare).CombinedOutput(); err != nil {
+		t.Fatalf("%v %s", err, out)
+	}
+	r.git("remote", "add", "origin", bare)
+	res, err := r.build(Options{Points: []conf.BuildPoint{{Dir: "./", Cmd: "true"}}})
+	if err != nil || !res.Pushed {
+		t.Fatalf("pushed=%v err=%v", res.Pushed, err)
+	}
+	out, _ := exec.Command("git", "-C", bare, "rev-parse", "--verify", "refs/heads/"+res.Branch).CombinedOutput()
+	if strings.TrimSpace(string(out)) != r.git("rev-parse", res.Branch) {
+		t.Errorf("ветка сборки должна быть в origin: %s", out)
+	}
+}
+
+func TestBuildPushFailureKeepsBranch(t *testing.T) {
+	r := newRepo(t)
+	r.git("remote", "add", "origin", filepath.Join(t.TempDir(), "нет-такого.git"))
+	res, err := r.build(Options{Points: []conf.BuildPoint{{Dir: "./", Cmd: "true"}}})
+	if err != nil || !res.Done || res.Pushed {
+		t.Fatalf("done=%v pushed=%v err=%v", res.Done, res.Pushed, err)
+	}
+	if !strings.Contains(strings.Join(res.Lines, "\n"), "push не удался") {
+		t.Errorf("нужно сообщение про push: %v", res.Lines)
+	}
+}
+
+func TestBuildParallelRunsTogether(t *testing.T) {
+	r := newRepo(t)
+	os.MkdirAll(filepath.Join(r.dir, "backend"), 0o755)
+	os.MkdirAll(filepath.Join(r.dir, "frontend"), 0o755)
+	// каждая точка ждёт файл соседа: по очереди такая сборка зависла бы, одновременно проходит
+	pts := []conf.BuildPoint{
+		{Dir: "backend/", Cmd: "touch ../a.flag; for i in $(seq 100); do [ -f ../b.flag ] && echo from-back && exit 0; sleep 0.05; done; exit 9"},
+		{Dir: "frontend/", Cmd: "touch ../b.flag; for i in $(seq 100); do [ -f ../a.flag ] && echo from-front && exit 0; sleep 0.05; done; exit 9"},
+	}
+	var out bytes.Buffer
+	res, err := r.build(Options{Points: pts, Parallel: true, Out: &out})
+	if err != nil || !res.Done || len(res.Runs) != 2 {
+		t.Fatalf("%v %+v", err, res)
+	}
+	if res.Runs[0].Point.Dir != "backend/" || res.Runs[1].Point.Dir != "frontend/" {
+		t.Error("результаты должны идти в порядке sky.conf")
+	}
+	if !strings.Contains(out.String(), "[backend/] from-back\n") || !strings.Contains(out.String(), "[frontend/] from-front\n") {
+		t.Errorf("строки вывода должны идти с меткой точки: %q", out.String())
+	}
+}
+
+func TestBuildParallelFailureCreatesNothing(t *testing.T) {
+	r := newRepo(t)
+	pts := []conf.BuildPoint{
+		{Dir: "./", Cmd: "exit 3"},
+		{Dir: "./", Cmd: "touch second.txt"},
+	}
+	res, err := r.build(Options{Points: pts, Parallel: true})
+	if err == nil || !strings.Contains(err.Error(), "код 3") || res.Done {
+		t.Fatalf("done=%v err=%v", res.Done, err)
+	}
+	if r.git("branch", "--list", "build/*") != "" {
+		t.Error("ветка сборки не должна появиться")
+	}
+	if len(res.Runs) != 2 {
+		t.Errorf("параллельно ждём все точки: %d", len(res.Runs))
+	}
+}

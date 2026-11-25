@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/DrBopoH/sky-cli/internal/conf"
@@ -23,19 +24,21 @@ import (
 const (
 	Dev     = "dev"
 	Prefix  = vhist.Prefix // ветки сборок: build/ММДД-ЧЧММ
+	remote  = "origin"
 	tailMax = 4000
 )
 
 // Options — параметры одного вызова.
 type Options struct {
-	Root   string
-	From   string // «R.B.C+T»: точка отсчёта, пока в dev нет именованных коммитов
-	Points []conf.BuildPoint
-	State  byte   // a, b, s, m; 0 — a
-	Title  string // название сборки; пусто — «Build N alpha»
-	Dry    bool
-	Now    time.Time
-	Out    io.Writer // куда стримить вывод команд; nil — никуда
+	Root     string
+	From     string // «R.B.C+T»: точка отсчёта, пока в dev нет именованных коммитов
+	Points   []conf.BuildPoint
+	State    byte   // a, b, s, m; 0 — a
+	Title    string // название сборки; пусто — «Build N alpha»
+	Dry      bool
+	Parallel bool // точки сборки идут одновременно, вывод построчно с меткой [папка]; сборка снимается, если успешны все
+	Now      time.Time
+	Out      io.Writer // куда стримить вывод команд; nil — никуда
 }
 
 // Run — итог запуска одной точки сборки.
@@ -54,6 +57,7 @@ type Result struct {
 	Runs     []Run
 	Skipped  bool   // в sky.conf нет build: запуск пропущен
 	Done     bool   // ветка создана
+	Pushed   bool   // ветка сборки отправлена в origin
 	Markdown string // отчёт для foryou/build.md
 }
 
@@ -147,13 +151,8 @@ func (e *env) run() error {
 	if o.Dry {
 		return nil
 	}
-	for _, p := range o.Points {
-		r := e.exec(p)
-		e.res.Runs = append(e.res.Runs, r)
-		if r.Code != 0 {
-			return fmt.Errorf("сборка не удалась на «%s %s» (код %d): ветка не создана", p.Dir, p.Cmd, r.Code)
-		}
-		e.say("✓ %s %s (%s)", p.Dir, p.Cmd, r.Duration.Round(time.Millisecond))
+	if err := e.runPoints(); err != nil {
+		return err
 	}
 	tree := strings.TrimSpace(gitx.Try(o.Root, "rev-parse", tipHash+"^{tree}"))
 	commit, err := gitx.Run(o.Root, "commit-tree", tree, "-p", tipHash, "-m", msg)
@@ -164,7 +163,24 @@ func (e *env) run() error {
 		return err
 	}
 	e.res.Done = true
+	e.push(branch)
 	return nil
+}
+
+// push отправляет ветку сборки в origin (без force): ветки сборок общие, фиксы идут в них PR. Без origin — молча пропуск,
+// при ошибке сборка остаётся целой, а sky говорит, чем повторить.
+func (e *env) push(branch string) {
+	root := e.o.Root
+	if !gitx.OK(root, "remote", "get-url", remote) {
+		e.say("· origin нет: ветка %s осталась локальной", branch)
+		return
+	}
+	if _, err := gitx.Run(root, "push", "-u", remote, branch); err != nil {
+		e.say("! ветка %s создана, но push не удался (повтори: git push -u %s %s): %v", branch, remote, branch, err)
+		return
+	}
+	e.res.Pushed = true
+	e.say("  push %s %s", remote, branch)
 }
 
 func (e *env) dir(p conf.BuildPoint) string {
@@ -174,14 +190,89 @@ func (e *env) dir(p conf.BuildPoint) string {
 	return filepath.Join(e.o.Root, filepath.FromSlash(p.Dir))
 }
 
-func (e *env) exec(p conf.BuildPoint) Run {
+// runPoints запускает точки сборки: по очереди (первая неудача останавливает) или, с Parallel, одновременно
+// (ждём все, чтобы показать все неудачи; результаты в порядке sky.conf).
+func (e *env) runPoints() error {
+	pts := e.o.Points
+	if !e.o.Parallel || len(pts) < 2 {
+		for _, p := range pts {
+			r := e.exec(p, e.o.Out)
+			e.res.Runs = append(e.res.Runs, r)
+			if r.Code != 0 {
+				return fmt.Errorf("сборка не удалась на «%s %s» (код %d): ветка не создана", p.Dir, p.Cmd, r.Code)
+			}
+			e.say("✓ %s %s (%s)", p.Dir, p.Cmd, r.Duration.Round(time.Millisecond))
+		}
+		return nil
+	}
+	var mu sync.Mutex
+	runs := make([]Run, len(pts))
+	var wg sync.WaitGroup
+	for i, p := range pts {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			var w io.Writer
+			if e.o.Out != nil {
+				w = &prefixWriter{mu: &mu, out: e.o.Out, prefix: "[" + p.Dir + "] "}
+			}
+			runs[i] = e.exec(p, w)
+			if pw, ok := w.(*prefixWriter); ok {
+				pw.flush()
+			}
+		}()
+	}
+	wg.Wait()
+	e.res.Runs = append(e.res.Runs, runs...)
+	var failed []string
+	for _, r := range runs {
+		if r.Code != 0 {
+			failed = append(failed, fmt.Sprintf("«%s %s» (код %d)", r.Point.Dir, r.Point.Cmd, r.Code))
+			continue
+		}
+		e.say("✓ %s %s (%s)", r.Point.Dir, r.Point.Cmd, r.Duration.Round(time.Millisecond))
+	}
+	if len(failed) > 0 {
+		return fmt.Errorf("сборка не удалась на %s: ветка не создана", strings.Join(failed, ", "))
+	}
+	return nil
+}
+
+// prefixWriter пишет в общий вывод целыми строками с меткой точки, чтобы параллельные точки не смешивались.
+type prefixWriter struct {
+	mu     *sync.Mutex
+	out    io.Writer
+	prefix string
+	buf    []byte
+}
+
+func (w *prefixWriter) Write(p []byte) (int, error) {
+	w.buf = append(w.buf, p...)
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	for {
+		i := bytes.IndexByte(w.buf, '\n')
+		if i < 0 {
+			break
+		}
+		fmt.Fprintf(w.out, "%s%s\n", w.prefix, w.buf[:i])
+		w.buf = w.buf[i+1:]
+	}
+	return len(p), nil
+}
+
+func (w *prefixWriter) flush() {
+	if len(w.buf) > 0 {
+		w.Write([]byte("\n"))
+	}
+}
+
+func (e *env) exec(p conf.BuildPoint, out io.Writer) Run {
 	var tail bytes.Buffer
 	var w io.Writer = &tail
-	if e.o.Out != nil {
-		w = io.MultiWriter(e.o.Out, &tail)
-	}
-	if e.o.Out != nil {
-		fmt.Fprintf(e.o.Out, "$ [%s] %s\n", p.Dir, p.Cmd)
+	if out != nil {
+		w = io.MultiWriter(out, &tail)
+		fmt.Fprintf(out, "$ [%s] %s\n", p.Dir, p.Cmd)
 	}
 	c := exec.Command("sh", "-c", p.Cmd)
 	c.Dir = e.dir(p)
@@ -216,7 +307,11 @@ func (e *env) markdown(err error) string {
 	case e.o.Dry:
 		b.WriteString("Итог: пробный запуск (`--dry`), ничего не менялось\n")
 	default:
-		fmt.Fprintf(&b, "Итог: **создана** ветка `%s`\n", e.res.Branch)
+		fmt.Fprintf(&b, "Итог: **создана** ветка `%s`", e.res.Branch)
+		if e.res.Pushed {
+			b.WriteString(", отправлена в origin")
+		}
+		b.WriteString("\n")
 	}
 	if e.res.Message != "" {
 		fmt.Fprintf(&b, "\nСообщение хвоста: `%s`\n", e.res.Message)
