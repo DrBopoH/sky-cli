@@ -53,7 +53,7 @@ func runPr(a *App, env Env, args []string) error {
 	o.Root = l.Root
 	br, t, ok := feature.Current(l.Root)
 	if !ok || !strings.HasPrefix(br, feature.Prefix) {
-		return fmt.Errorf("sky pr работает на ветке фичи %sММДД-ЧЧММ/имя, заведённой sky feature (сейчас: %s)", feature.Prefix, orDetached(br))
+		return fmt.Errorf("sky pr работает на ветке фичи %sГГГГ-ММДД/имя, заведённой sky feature (сейчас: %s)", feature.Prefix, orDetached(br))
 	}
 	o.Branch, o.Kind, o.Module, o.Chain = br, string(t.Kind), t.Module, t.Chain
 	if t.Kind == feature.Fix && o.Base == "" {
