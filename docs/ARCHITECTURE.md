@@ -80,7 +80,7 @@
 ## 7. Тексты и readme
 
 - Длинные тексты (описания команд и операций, шапки `foryou/`, шапка `sky.conf`) лежат в `text/` своего пакета и подключаются через `embed`: `cli/text/*-summary.txt` и `init-help.txt`, `ops/text`, `look/text`, `pack/text/archive.txt`, `conf/text/header.txt`.
-- Статические тексты для Инженера (`readme.md`, регламент, теории) лежат в `internal/readme/text/` и встраиваются в бинарь. `readme.Files` отдаёт их по порядку: `readme.md`, `MT-git-reglament.md`, `MT-unify-systems.md`, `MT-fix-before-reset.md`.
+- Статические тексты для Инженера (`readme.md`, регламент, теории) лежат в `internal/readme/text/` и встраиваются в бинарь. `readme.Files` отдаёт их по порядку: `readme.md`, `docs.md` (образец набора документации), `MT-git-reglament.md`, `MT-unify-systems.md`, `MT-fix-before-reset.md`.
 - Разделы «Команды», «Операции» и «Конфиг» в `readme.md` собираются из реестров (`cli.Entries`, `ops.All()`, `conf.Render`) и расходиться с кодом не могут.
 - Тест `TestStaticNoProjectContext` запрещает в статических текстах привязку к конкретному проекту и автору: к имени старого скрипта-предшественника, к имени автора и к названиям его проектов. Это защита универсальности текстов.
 
