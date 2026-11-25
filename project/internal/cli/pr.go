@@ -68,6 +68,9 @@ func runPr(a *App, env Env, args []string) error {
 	}
 	if o.Dry {
 		fmt.Fprintln(env.Out, "· --dry: ничего не запушено и не открыто")
+	} else if res.URL != "" {
+		n := res.URL[strings.LastIndex(res.URL, "/")+1:]
+		fmt.Fprintf(env.Out, "  слить: sky merge %s\n", n)
 	}
 	return nil
 }
