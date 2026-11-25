@@ -2,6 +2,7 @@ package cli
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -237,5 +238,31 @@ func TestProtectArgs(t *testing.T) {
 	}
 	if code, _, _ := run(newApp(), dir, "protect", "--bad"); code == 0 {
 		t.Fatal("неизвестный флаг")
+	}
+}
+
+func TestPublishPushesMainToOrigin(t *testing.T) {
+	for _, local := range []bool{false, true} {
+		dir := buildRepo(t, "")
+		bare := filepath.Join(t.TempDir(), "o.git")
+		if out, err := exec.Command("git", "init", "-q", "--bare", bare).CombinedOutput(); err != nil {
+			t.Fatalf("%v %s", err, out)
+		}
+		gitIn(t, dir, "remote", "add", "origin", bare)
+		if code, _, errs := run(newApp(), dir, "build"); code != 0 {
+			t.Fatalf("build: %s", errs)
+		}
+		args := []string{"publish"}
+		if local {
+			args = append(args, "--local")
+		}
+		code, out, errs := run(newApp(), dir, args...)
+		if code != 0 {
+			t.Fatalf("publish: %d %s %s", code, out, errs)
+		}
+		pushed := remoteTip(bare, "main") != ""
+		if pushed == local || (pushed && remoteTip(bare, "main") != gitIn(t, dir, "rev-parse", "main")) {
+			t.Errorf("local=%v pushed=%v: main в origin должна быть, только если не --local", local, pushed)
+		}
 	}
 }

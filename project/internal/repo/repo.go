@@ -223,18 +223,30 @@ const (
 	DevExists  DevState = iota // dev уже есть, ничего не менялось
 	DevCreated                 // dev создана от вершины main/master и активна
 	DevSkipped                 // dev нет, но HEAD не на main/master: откуда ей идти, решает человек
+	DevTracked                 // dev взята из origin/dev (клон проекта, где dev уже есть на сервере)
 )
 
 // mainBranches — ветки, от вершины которых sky сам отводит dev в репозитории с историей.
 var mainBranches = map[string]bool{"main": true, "master": true}
 
-// EnsureDev заводит dev в репозитории с историей: от вершины main (или master), если HEAD стоит на ней.
+// EnsureDev заводит dev в репозитории с историей: из origin/dev, если она там есть (свежий клон), иначе от вершины
+// main (или master), если HEAD стоит на ней. Свою dev рядом с чужой sky не заводит: истории разошлись бы.
 // Рабочее дерево и история не меняются; cur — ветка HEAD («» при detached HEAD).
 func (l Layout) EnsureDev() (state DevState, cur string, err error) {
 	if gitx.OK(l.Root, "rev-parse", "--verify", "-q", "refs/heads/dev") {
 		return DevExists, "", nil
 	}
 	cur = strings.TrimSpace(gitx.Try(l.Root, "symbolic-ref", "-q", "--short", "HEAD"))
+	if gitx.OK(l.Root, "rev-parse", "--verify", "-q", "refs/remotes/origin/dev") {
+		args := []string{"branch", "-q", "--track", "dev", "origin/dev"}
+		if mainBranches[cur] {
+			args = []string{"switch", "-q", "-c", "dev", "--track", "origin/dev"}
+		}
+		if _, err := gitx.Run(l.Root, args...); err != nil {
+			return DevSkipped, cur, err
+		}
+		return DevTracked, cur, nil
+	}
 	if !mainBranches[cur] {
 		return DevSkipped, cur, nil
 	}

@@ -6,9 +6,10 @@ import (
 
 	"github.com/DrBopoH/sky-cli/internal/publish"
 	"github.com/DrBopoH/sky-cli/internal/repo"
+	"github.com/DrBopoH/sky-cli/internal/sync"
 )
 
-const publishUsage = `sky publish [--build build/ММДД-ЧЧММ] [--title "название"] [--dry]`
+const publishUsage = `sky publish [--build build/ММДД-ЧЧММ] [--title "название"] [--dry] [--local]`
 
 func publishCommand() Command {
 	return Command{
@@ -22,6 +23,7 @@ func publishCommand() Command {
 
 func runPublish(a *App, env Env, args []string) error {
 	var o publish.Options
+	local := false
 	for i := 0; i < len(args); i++ {
 		x := args[i]
 		val := func() (string, error) {
@@ -35,6 +37,8 @@ func runPublish(a *App, env Env, args []string) error {
 		switch x {
 		case "--dry":
 			o.Dry = true
+		case "--local":
+			local = true
 		case "--build":
 			o.Build, err = val()
 		case "--title":
@@ -54,6 +58,7 @@ func runPublish(a *App, env Env, args []string) error {
 		return err
 	}
 	o.Root = l.Root
+	before := sync.Tips(l.Root)
 	res, err := publish.Run(o)
 	for _, ln := range res.Lines {
 		fmt.Fprintln(env.Out, ln)
@@ -63,6 +68,8 @@ func runPublish(a *App, env Env, args []string) error {
 	}
 	if o.Dry {
 		fmt.Fprintln(env.Out, "· --dry: ничего не изменено")
+		return nil
 	}
+	pushShared(env, l.Root, before, local)
 	return nil
 }
