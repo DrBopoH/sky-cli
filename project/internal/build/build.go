@@ -1,5 +1,6 @@
 // Package build — сборка по регламенту (3.6): запускает команды сборки из sky.conf, ждёт успеха и только тогда
 // создаёт ветку сборки «build/ММДД-ЧЧММ» с хвостом — коммитом с тем же деревом, что у вершины dev.
+// Командам сборки доступна переменная SKY_BUILD_VERSION («v1.a1.37+37.abc1234») — её можно вшить в бинарь через -ldflags.
 // Ветка сборки в dev не вливается; HEAD остаётся на dev.
 package build
 
@@ -64,6 +65,7 @@ type env struct {
 	o   Options
 	res *Result
 	h   vhist.H
+	ver string // версия сборки: попадает в команды как SKY_BUILD_VERSION
 }
 
 func (e *env) say(f string, a ...any) { e.res.Lines = append(e.res.Lines, fmt.Sprintf(f, a...)) }
@@ -122,6 +124,7 @@ func (e *env) run() error {
 	tipHash := strings.TrimSpace(gitx.Try(o.Root, "rev-parse", "--verify", Dev))
 	v := named.Version{Full: true, R: tip.R, B: tip.B, C: tip.C, T: tip.T, State: o.State, Hash: strings.TrimSpace(gitx.Try(o.Root, "rev-parse", "--short=7", tipHash))}
 	msg := named.Message(title, v)
+	e.ver = v.String()
 	branch := Prefix + o.Now.Format("0102-1504")
 	if gitx.OK(o.Root, "rev-parse", "--verify", "-q", "refs/heads/"+branch) {
 		return fmt.Errorf("ветка %s уже есть: подожди минуту", branch)
@@ -184,6 +187,7 @@ func (e *env) exec(p conf.BuildPoint) Run {
 	}
 	c := exec.Command("sh", "-c", p.Cmd)
 	c.Dir = e.dir(p)
+	c.Env = append(os.Environ(), "SKY_BUILD_VERSION="+e.ver)
 	c.Stdout, c.Stderr = w, w
 	start := time.Now()
 	err := c.Run()

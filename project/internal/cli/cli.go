@@ -88,7 +88,7 @@ func (a *App) Run(cwd string, args []string, out, errw io.Writer) int {
 		a.help(env)
 		return 0
 	case "version", "-v", "--version":
-		fmt.Fprintf(out, "sky %s\n", version.Version)
+		fmt.Fprintf(out, "sky %s\n", version.String())
 		return 0
 	}
 	c := a.find(args[0])

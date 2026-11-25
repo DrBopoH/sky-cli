@@ -206,3 +206,16 @@ func TestBuildDryChangesNothing(t *testing.T) {
 		t.Error("dry создал ветку")
 	}
 }
+
+func TestBuildVersionInEnv(t *testing.T) {
+	r := newRepo(t)
+	tip := r.git("rev-parse", "--short=7", "HEAD")
+	res, err := r.build(Options{Points: []conf.BuildPoint{{Dir: "./", Cmd: "printf %s \"$SKY_BUILD_VERSION\" > ver.out"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, _ := os.ReadFile(filepath.Join(r.dir, "ver.out"))
+	if string(b) != "v1.a1.29+29."+tip || !strings.HasSuffix(res.Message, string(b)) {
+		t.Errorf("SKY_BUILD_VERSION = %q", b)
+	}
+}
