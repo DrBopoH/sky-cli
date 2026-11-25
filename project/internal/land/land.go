@@ -28,6 +28,7 @@ type Options struct {
 	Module  string   // фича → ветка этого модуля
 	Chain   []string // цепочка от зерна вниз до модуля; пусто — по графу, если путь один
 	Seed    bool     // изменение зерна прямо в dev
+	Source  string   // коммит-источник вместо текущей ветки (патч, применённый на detached HEAD); нужна цель: Module или Seed
 	Dry     bool     // только описать, ничего не менять
 	From    string   // «R.B.C+T»: точка отсчёта, пока в dev нет именованных коммитов
 	Now     time.Time
@@ -77,6 +78,14 @@ func (e *env) current() (string, error) {
 		return "", fmt.Errorf("HEAD не на ветке: перейди на ветку фичи или модуля")
 	}
 	return b, nil
+}
+
+// label — как назвать источник в отчёте: ветку по имени, коммит-источник (патч) коротким хэшем.
+func (e *env) label(src string) string {
+	if e.o.Source != "" {
+		return "патч " + e.short(src)
+	}
+	return src
 }
 
 func (e *env) checkout(b string) error {
@@ -152,11 +161,17 @@ func Run(o Options) (Result, error) {
 	if err := e.validate(); err != nil {
 		return *e.res, err
 	}
-	cur, err := e.current()
-	if err != nil {
-		return *e.res, err
+	cur := o.Source
+	if cur == "" {
+		var err error
+		if cur, err = e.current(); err != nil {
+			return *e.res, err
+		}
+	} else if (o.Module == "") == !o.Seed {
+		return *e.res, fmt.Errorf("с коммитом-источником нужна ровно одна цель: --module M или --seed")
 	}
 	_, _, isModule := modules.ParseBranch(cur)
+	var err error
 	switch {
 	case cur == Dev:
 		return *e.res, fmt.Errorf("на %s нечего вливать: перейди на ветку фичи или модуля", Dev)
@@ -206,7 +221,7 @@ func (e *env) seed(cur string) error {
 	}
 	v := named.Version{Full: true, R: tip.R, B: tip.B, C: tip.C + 1, T: tip.T + 1, Hash: e.short(cur)}
 	msg := named.Message(e.o.Summary, v)
-	e.say("зерно: %s → %s (squash)", cur, Dev)
+	e.say("зерно: %s → %s (squash)", e.label(cur), Dev)
 	e.say("  %s", msg)
 	e.res.Message = msg
 	if e.o.Dry {
@@ -258,7 +273,7 @@ func (e *env) feature(cur string) error {
 			e.say("  ветка %s (открытая)", s.name)
 		}
 	}
-	e.say("фича: %s → %s (squash)", cur, last.name)
+	e.say("фича: %s → %s (squash)", e.label(cur), last.name)
 	e.say("  %s", msg)
 	e.res.Message = msg
 	if e.o.Dry {
