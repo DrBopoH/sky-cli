@@ -213,3 +213,23 @@ func TestBodyShape(t *testing.T) {
 		t.Errorf("%q", b)
 	}
 }
+
+func TestParseBodyRoundTrip(t *testing.T) {
+	for _, o := range []Options{
+		{Branch: "wip/x", Summary: "S", Kind: "seed"},
+		{Branch: "wip/x", Summary: "S", Kind: "module", Module: "storage", Chain: []string{"api", "storage"}},
+		{Branch: "wip/x", Summary: "S", Kind: "fix", Base: "build/1125-1020"},
+	} {
+		got, ok := ParseBody(Body(o))
+		want := Target{Branch: o.Branch, Kind: o.Kind, Module: o.Module, Chain: o.Chain}
+		if o.Kind == "fix" {
+			want.Build = o.Base
+		}
+		if !ok || got.Branch != want.Branch || got.Kind != want.Kind || got.Module != want.Module || strings.Join(got.Chain, ",") != strings.Join(want.Chain, ",") || got.Build != want.Build {
+			t.Errorf("%+v → %+v (%v)", o, got, ok)
+		}
+	}
+	if _, ok := ParseBody("просто текст\n\nsky-branch: x"); ok {
+		t.Error("без sky-target цели нет")
+	}
+}

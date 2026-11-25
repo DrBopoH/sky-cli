@@ -35,6 +35,8 @@ var (
 	summaryPrRaw string
 	//go:embed text/sync-summary.txt
 	summarySyncRaw string
+	//go:embed text/merge-summary.txt
+	summaryMergeRaw string
 )
 
 var (
@@ -52,4 +54,5 @@ var (
 	summaryPublish  = strings.TrimSpace(summaryPublishRaw)
 	summaryPr       = strings.TrimSpace(summaryPrRaw)
 	summarySync     = strings.TrimSpace(summarySyncRaw)
+	summaryMerge    = strings.TrimSpace(summaryMergeRaw)
 )

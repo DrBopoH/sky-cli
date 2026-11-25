@@ -217,3 +217,15 @@ func TestSyncNeedsRemote(t *testing.T) {
 		t.Fatal("лишний аргумент")
 	}
 }
+
+func TestMergeArgs(t *testing.T) {
+	dir := buildRepo(t, "")
+	for _, args := range [][]string{{"merge"}, {"merge", "1", "2"}, {"merge", "--bad", "1"}} {
+		if code, _, _ := run(newApp(), dir, args...); code == 0 {
+			t.Errorf("%v должна отказать", args)
+		}
+	}
+	if code, _, errs := run(newApp(), dir, "merge", "7"); code == 0 || !strings.Contains(errs, "нет удалённого") {
+		t.Fatalf("без origin: %d %s", code, errs)
+	}
+}
