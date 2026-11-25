@@ -229,3 +229,13 @@ func TestMergeArgs(t *testing.T) {
 		t.Fatalf("без origin: %d %s", code, errs)
 	}
 }
+
+func TestProtectArgs(t *testing.T) {
+	dir := buildRepo(t, "")
+	if code, _, _ := run(newApp(), dir, "protect", "x"); code == 0 {
+		t.Fatal("лишний аргумент")
+	}
+	if code, _, _ := run(newApp(), dir, "protect", "--bad"); code == 0 {
+		t.Fatal("неизвестный флаг")
+	}
+}

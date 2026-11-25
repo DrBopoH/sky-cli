@@ -1,0 +1,7 @@
+{
+  "name": "sky regulation: no deletion",
+  "target": "branch",
+  "enforcement": "active",
+  "conditions": {"ref_name": {"include": ["refs/heads/main", "refs/heads/dev", "refs/heads/build/**"], "exclude": []}},
+  "rules": [{"type": "deletion"}]
+}

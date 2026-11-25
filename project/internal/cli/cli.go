@@ -37,7 +37,7 @@ type App struct {
 // New собирает консоль. Что делать с патчем и какие операции он знает, консоль не знает: это даёт точка входа.
 func New(plan apply.Planner, operations []readme.Entry) *App {
 	return &App{
-		Commands:   []Command{initCommand(), applyCommand(), commitCommand(), rollbackCommand(), lookCommand(), upCommand(), landCommand(), buildCommand(), fixCommand(), featureCommand(), modulesCommand(), publishCommand(), prCommand(), syncCommand(), mergeCommand()},
+		Commands:   []Command{initCommand(), applyCommand(), commitCommand(), rollbackCommand(), lookCommand(), upCommand(), landCommand(), buildCommand(), fixCommand(), featureCommand(), modulesCommand(), publishCommand(), prCommand(), syncCommand(), mergeCommand(), protectCommand()},
 		Plan:       plan,
 		Operations: operations,
 	}
