@@ -1,11 +1,13 @@
 // Package sync — удалённая часть, этап R2: подтягивает общие ветки из origin (main, dev, ветки сборок и модулей),
 // чтобы land, build и modules работали по реальной удалённой области. Удалённая область — источник: sky только
-// догоняет её локальными ветками (создаёт недостающие, продвигает отстающие без слияний) и ничего не пушит.
+// догоняет её локальными ветками (создаёт недостающие, продвигает отстающие без слияний). В обратную сторону работает только
+// Publish: отправляет общие ветки, вершины которых изменились после локальной операции (land, fix), без force.
 // Ветку, где у автора есть свои коммиты или история разошлась, sky не трогает, а называет. wip-ветки не затрагиваются.
 package sync
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/DrBopoH/sky-cli/internal/gitx"
@@ -164,4 +166,41 @@ func describe(it Item, dry bool) string {
 		return "⚠ отстаёт, но на ней незакоммиченные правки: не тронута"
 	}
 	return "⚠ истории разошлись, не тронута: реши вручную"
+}
+
+// Tips — вершины общих веток (имя → коммит) для сравнения до и после локальной операции.
+func Tips(root string) map[string]string {
+	out := map[string]string{}
+	for _, ln := range strings.Split(strings.TrimSpace(gitx.Try(root, "for-each-ref", "--format=%(refname:short) %(objectname)", "refs/heads/")), "\n") {
+		n, h, ok := strings.Cut(ln, " ")
+		if ok && Shared(n) {
+			out[n] = h
+		}
+	}
+	return out
+}
+
+// HasRemote сообщает, настроен ли origin.
+func HasRemote(root string) bool { return gitx.OK(root, "remote", "get-url", Remote) }
+
+// Publish отправляет в origin общие ветки, изменившиеся с момента снимка before (без force). Возвращает ушедшие ветки;
+// при ошибке — те, что успели уйти, и ошибку для первой неудавшейся. Без origin ничего не делает.
+func Publish(root string, before map[string]string) ([]string, error) {
+	if !HasRemote(root) {
+		return nil, nil
+	}
+	var names, pushed []string
+	for n, h := range Tips(root) {
+		if before[n] != h {
+			names = append(names, n)
+		}
+	}
+	sort.Strings(names)
+	for _, n := range names {
+		if _, err := gitx.Run(root, "push", "-u", Remote, n); err != nil {
+			return pushed, fmt.Errorf("ветка %s: push не удался (повтори git push -u %s %s): %v", n, Remote, n, err)
+		}
+		pushed = append(pushed, n)
+	}
+	return pushed, nil
 }
