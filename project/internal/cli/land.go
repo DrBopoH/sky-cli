@@ -92,7 +92,12 @@ func runLand(a *App, env Env, args []string) error {
 			}
 		}
 	}
-	before := sync.Tips(l.Root)
+	return landAndPush(env, l.Root, o, local)
+}
+
+// landAndPush выполняет land, печатает отчёт и отправляет изменившиеся общие ветки (если не --local).
+func landAndPush(env Env, root string, o land.Options, local bool) error {
+	before := sync.Tips(root)
 	res, err := land.Run(o)
 	for _, ln := range res.Lines {
 		fmt.Fprintln(env.Out, ln)
@@ -105,6 +110,6 @@ func runLand(a *App, env Env, args []string) error {
 		return nil
 	}
 	fmt.Fprintf(env.Out, "✓ %s (HEAD: %s)\n", res.Message, res.Branch)
-	pushShared(env, l.Root, before, local)
+	pushShared(env, root, before, local)
 	return nil
 }
